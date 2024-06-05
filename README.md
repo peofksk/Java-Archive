@@ -13,3 +13,5 @@ https://github.com/altakori/Java-Archive/assets/126345795/ab4333ad-2814-45ef-953
 - main
 
 ## How to play
+1. Apply jlayer-1.0.1.jar in 'lib' file
+2. Compile main
