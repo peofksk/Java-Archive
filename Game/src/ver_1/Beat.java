@@ -8,7 +8,7 @@ public class Beat {
 	public double getTime() {
 		return time;
 	}
-	public void setTime(int time) {
+	public void setTime(double time) {
 		this.time = time;
 	}
 	public String getNoteName() {
