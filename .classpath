@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="src" path="Game/src"/>
+	<classpathentry kind="lib" path="Game/lib/jlayer-1.0.1.jar"/>
+	<classpathentry kind="output" path="Game/bin"/>
+</classpath>

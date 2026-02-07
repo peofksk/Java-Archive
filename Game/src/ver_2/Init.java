@@ -25,15 +25,7 @@ public class Init {
         am.loadImage("title_unwelcome", "../Asset/Title_unwelcomeSchool.png");
         am.loadImage("title_after", "../Asset/Title_afterSchoolDessert.png");
         am.loadImage("title_coming", "../Asset/Title_comingSoon.png");
-
-        am.loadMusic("intro_bgm", "introMusic.mp3", true);
-        am.loadMusic("option_bgm", "optionMusic.mp3", true);
-        am.loadMusic("result_bgm", "resultMusic.mp3", true);
-        am.loadMusic("correction_bgm", "correctionMusic.mp3", true);
-
-        am.loadMusic("sample_unwelcome", "sample_unwelcomeSchool.mp3", true);
-        am.loadMusic("sample_after", "sample_afterSchoolDessert.mp3", true);
-
+        
         am.loadText("map_unwelcome_easy",
                 "../Asset/unwelcomeSchool_Easy.txt");
 
