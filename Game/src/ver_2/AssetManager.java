@@ -13,7 +13,6 @@ public class AssetManager {
     private static final AssetManager instance = new AssetManager();
 
     private HashMap<String, Image> images = new HashMap<>();
-    private HashMap<String, Music> musics = new HashMap<>();
     private HashMap<String, ArrayList<String>> texts = new HashMap<>();
 
     private AssetManager() {}
@@ -25,11 +24,6 @@ public class AssetManager {
     void loadImage(String key, String path) {
         Image img = new ImageIcon(getClass().getResource(path)).getImage();
         images.put(key, img);
-    }
-
-    void loadMusic(String key, String path, boolean loop) {
-        Music music = new Music(path, loop);
-        musics.put(key, music);
     }
 
     void loadText(String key, String path) {
@@ -55,10 +49,6 @@ public class AssetManager {
 
     public Image getImage(String key) {
         return images.get(key);
-    }
-
-    public Music getMusic(String key) {
-        return musics.get(key);
     }
 
     public ArrayList<String> getText(String key) {

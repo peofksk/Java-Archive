@@ -7,37 +7,44 @@ import javazoom.jl.player.Player;
 
 public class Music extends Thread {
 
+    private final String path;
+    private final boolean loop;
     private Player player;
-    private boolean isLoop;
-    private boolean isPlaying = true;
-    private String musicPath;
+    private volatile boolean isPlaying = true;
 
-    public Music(String musicPath, boolean isLoop) {
-        this.musicPath = musicPath;
-        this.isLoop = isLoop;
+    public Music(String path, boolean loop) {
+        this.path = path;
+        this.loop = loop;
+        setDaemon(true);
     }
 
     @Override
     public void run() {
         try {
             do {
-                InputStream is = getClass().getResourceAsStream("/" + musicPath);
+                InputStream is = getClass().getResourceAsStream("../Asset/" + path);
+                if (is == null) {
+                    throw new RuntimeException("Music not found: " + path);
+                }
+
                 BufferedInputStream bis = new BufferedInputStream(is);
                 player = new Player(bis);
                 player.play();
-            } while (isLoop && isPlaying);
+
+                if (!loop) break;
+
+            } while (isPlaying);
+
         } catch (Exception e) {
-            System.out.println("Music play error: " + musicPath);
+            System.out.println("Music play error: " + path);
             e.printStackTrace();
         }
     }
 
     public void close() {
-        isLoop = false;
         isPlaying = false;
         if (player != null) {
             player.close();
         }
-        interrupt();
     }
 }
