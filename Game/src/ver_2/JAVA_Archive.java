@@ -1,14 +1,13 @@
 package ver_2;
 
 import javax.swing.JFrame;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
 public class JAVA_Archive extends JFrame implements KeyListener {
 
     private GameState currentState;
+    private GamePanel panel;
 
     public JAVA_Archive() {
         setTitle("JAVA_Archive");
@@ -17,40 +16,49 @@ public class JAVA_Archive extends JFrame implements KeyListener {
         setResizable(false);
         setLocationRelativeTo(null);
 
+        panel = new GamePanel(this);
+        add(panel);
+
         addKeyListener(this);
-        setFocusable(true);
-        requestFocus();
+
+        setVisible(true);
+        panel.requestFocus();
 
         changeState(new IntroState(this));
-        setVisible(true);
+
+        startGameLoop();
+    }
+
+    private void startGameLoop() {
+        new Thread(() -> {
+            while (true) {
+                if (currentState != null) currentState.update();
+                panel.repaint();
+                try {
+                    Thread.sleep(16); // 60fps
+                } catch (InterruptedException e) {}
+            }
+        }).start();
     }
 
     public void changeState(GameState next) {
         if (currentState != null) currentState.exit();
         currentState = next;
-        currentState.enter();
+        if (currentState != null) currentState.enter();
     }
 
-    @Override
-    public void paint(Graphics g) {
-        Graphics2D g2 = (Graphics2D) g;
-        if (currentState != null) {
-            currentState.render(g2);
-        }
+    public GameState getCurrentState() {
+        return currentState;
     }
 
     @Override
     public void keyPressed(KeyEvent e) {
-        if (currentState != null) {
-            currentState.keyPressed(e);
-        }
+        if (currentState != null) currentState.keyPressed(e);
     }
 
     @Override
     public void keyReleased(KeyEvent e) {
-        if (currentState != null) {
-            currentState.keyReleased(e);
-        }
+        if (currentState != null) currentState.keyReleased(e);
     }
 
     @Override
