@@ -39,7 +39,7 @@ public class AssetManager {
             }
             br.close();
         } catch (Exception e) {
-            System.err.println("텍스트 로드 실패: " + path);
+            System.err.println("Text load failed: " + path);
             e.printStackTrace();
         }
 
@@ -48,10 +48,15 @@ public class AssetManager {
 
 
     public Image getImage(String key) {
-        return images.get(key);
+    	Image img = images.get(key);
+    	if (img == null) {
+    		System.err.println("[AssetManager] Image not found: " + key);
+    	}
+        return img;
     }
-
     public ArrayList<String> getText(String key) {
-        return texts.get(key);
+    	ArrayList<String> text = texts.get(key);
+    	if (text == null) System.err.println("[AssetManager] Text not found: " + key);
+        return text;
     }
 }

@@ -2,49 +2,46 @@ package ver_2;
 
 import java.io.BufferedInputStream;
 import java.io.InputStream;
-
 import javazoom.jl.player.Player;
 
-public class Music extends Thread {
+public class Music {
 
     private final String path;
-    private final boolean loop;
     private Player player;
-    private volatile boolean isPlaying = true;
+    private Thread thread;
 
-    public Music(String path, boolean loop) {
+    public Music(String path) {
         this.path = path;
-        this.loop = loop;
-        setDaemon(true);
     }
 
-    @Override
-    public void run() {
-        try {
-            do {
+    public void play() {
+        stop();
+
+        thread = new Thread(() -> {
+            try {
                 InputStream is = getClass().getResourceAsStream("../Asset/" + path);
-                if (is == null) {
-                    throw new RuntimeException("Music not found: " + path);
-                }
+                if (is == null) return;
 
                 BufferedInputStream bis = new BufferedInputStream(is);
                 player = new Player(bis);
                 player.play();
+            } catch (Exception e) {
+                System.out.println("Music play error: " + path);
+                e.printStackTrace();
+            }
+        });
 
-                if (!loop) break;
-
-            } while (isPlaying);
-
-        } catch (Exception e) {
-            System.out.println("Music play error: " + path);
-            e.printStackTrace();
-        }
+        thread.start();
     }
 
-    public void close() {
-        isPlaying = false;
+    public void stop() {
         if (player != null) {
             player.close();
+            player = null;
+        }
+        if (thread != null) {
+            thread.interrupt();
+            thread = null;
         }
     }
 }
