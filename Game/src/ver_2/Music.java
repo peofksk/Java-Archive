@@ -4,44 +4,47 @@ import java.io.BufferedInputStream;
 import java.io.InputStream;
 import javazoom.jl.player.Player;
 
-public class Music {
+public class Music implements Runnable {
 
     private final String path;
+    private final boolean loop;
     private Player player;
+    private volatile boolean playing = true;
     private Thread thread;
 
-    public Music(String path) {
+    public Music(String path, boolean loop) {
         this.path = path;
-    }
-
-    public void play() {
-        stop();
-
-        thread = new Thread(() -> {
-            try {
-                InputStream is = getClass().getResourceAsStream("../Asset/" + path);
-                if (is == null) return;
-
-                BufferedInputStream bis = new BufferedInputStream(is);
-                player = new Player(bis);
-                player.play();
-            } catch (Exception e) {
-                System.out.println("Music play error: " + path);
-                e.printStackTrace();
-            }
-        });
-
+        this.loop = loop;
+        thread = new Thread(this);
         thread.start();
     }
 
+    @Override
+    public void run() {
+        try {
+            do {
+                InputStream is =
+                    getClass().getResourceAsStream("../Asset/" + path);
+                if (is == null) {
+                    System.out.println("Music not found: " + path);
+                    return;
+                }
+
+                player = new Player(new BufferedInputStream(is));
+                player.play();
+            } while (loop && playing);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     public void stop() {
+        playing = false;
         if (player != null) {
             player.close();
-            player = null;
         }
         if (thread != null) {
             thread.interrupt();
-            thread = null;
         }
     }
 }

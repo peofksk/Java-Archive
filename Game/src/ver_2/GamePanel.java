@@ -4,9 +4,11 @@ import javax.swing.JPanel;
 import javax.swing.KeyStroke;
 import javax.swing.ActionMap;
 import javax.swing.InputMap;
+import javax.swing.AbstractAction;
 
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 
 public class GamePanel extends JPanel {
@@ -23,43 +25,49 @@ public class GamePanel extends JPanel {
         InputMap im = getInputMap(WHEN_IN_FOCUSED_WINDOW);
         ActionMap am = getActionMap();
 
-        im.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "ENTER");
-        im.put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "LEFT");
-        im.put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "RIGHT");
+        bindKey(im, am, "ENTER", KeyEvent.VK_ENTER);
+        bindKey(im, am, "LEFT", KeyEvent.VK_LEFT);
+        bindKey(im, am, "RIGHT", KeyEvent.VK_RIGHT);
+        bindKey(im, am, "ESCAPE", KeyEvent.VK_ESCAPE);
+    }
 
-        am.put("ENTER", new javax.swing.AbstractAction() {
+    private void bindKey(InputMap im, ActionMap am, String name, int keyCode) {
+
+        im.put(KeyStroke.getKeyStroke("pressed " + name), name + "_PRESSED");
+        im.put(KeyStroke.getKeyStroke("released " + name), name + "_RELEASED");
+
+        am.put(name + "_PRESSED", new AbstractAction() {
             @Override
-            public void actionPerformed(java.awt.event.ActionEvent e) {
-                dispatch(KeyEvent.VK_ENTER);
+            public void actionPerformed(ActionEvent e) {
+                dispatch(keyCode, KeyEvent.KEY_PRESSED);
             }
         });
 
-        am.put("LEFT", new javax.swing.AbstractAction() {
+        am.put(name + "_RELEASED", new AbstractAction() {
             @Override
-            public void actionPerformed(java.awt.event.ActionEvent e) {
-                dispatch(KeyEvent.VK_LEFT);
-            }
-        });
-
-        am.put("RIGHT", new javax.swing.AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent e) {
-                dispatch(KeyEvent.VK_RIGHT);
+            public void actionPerformed(ActionEvent e) {
+                dispatch(keyCode, KeyEvent.KEY_RELEASED);
             }
         });
     }
 
-    private void dispatch(int keyCode) {
+    private void dispatch(int keyCode, int type) {
         GameState state = game.getCurrentState();
-        if (state != null) {
-            state.keyPressed(new KeyEvent(
-                this,
-                KeyEvent.KEY_PRESSED,
-                System.currentTimeMillis(),
-                0,
-                keyCode,
-                KeyEvent.CHAR_UNDEFINED
-            ));
+        if (state == null) return;
+
+        KeyEvent e = new KeyEvent(
+            this,
+            type,
+            System.currentTimeMillis(),
+            0,
+            keyCode,
+            KeyEvent.CHAR_UNDEFINED
+        );
+
+        if (type == KeyEvent.KEY_PRESSED) {
+            state.keyPressed(e);
+        } else if (type == KeyEvent.KEY_RELEASED) {
+            state.keyReleased(e);
         }
     }
 

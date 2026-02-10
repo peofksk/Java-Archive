@@ -8,7 +8,6 @@ public class IntroState implements GameState {
 
     private final JAVA_Archive game;
     private Image background, title, pressEnter;
-    private Music bgm;
 
     public IntroState(JAVA_Archive game) {
         this.game = game;
@@ -21,12 +20,10 @@ public class IntroState implements GameState {
         title = am.getImage("game_title");
         pressEnter = am.getImage("press_enter");
 
-        bgm = new Music("introMusic.mp3");
-        bgm.play();
+        game.getContext().bgm.play("introMusic.mp3", true);
     }
 
-    @Override
-    public void update() {}
+    @Override public void update() {}
 
     @Override
     public void render(Graphics2D g) {
@@ -44,6 +41,6 @@ public class IntroState implements GameState {
 
     @Override
     public void exit() {
-        bgm.stop();
+        game.getContext().bgm.stop();
     }
 }
