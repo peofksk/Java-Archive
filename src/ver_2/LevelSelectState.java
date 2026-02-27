@@ -11,8 +11,8 @@ public class LevelSelectState implements GameState {
 	private Image[] titles;
 	private int index = 0;
 
-	private final String[] samples = { "sample_unwelcomeSchool.wav", "sample_afterSchoolDessert.wav",
-			"sample_comingSoon.av" };
+	private final String[] samples = { "/sample_unwelcomeSchool.wav", "/sample_afterSchoolDessert.wav",
+			"/sample_comingSoon.wav" };
 
 	public LevelSelectState(JAVA_Archive game) {
 		this.game = game;

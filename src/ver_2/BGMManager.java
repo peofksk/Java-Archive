@@ -14,7 +14,7 @@ public class BGMManager {
         try {
             InputStream is = getClass().getResourceAsStream(path);
             if (is == null) {
-                System.out.println("Music resource not found: " + path);
+                System.out.println("[BGMManager] Music resource not found: " + path);
                 return;
             }
 
