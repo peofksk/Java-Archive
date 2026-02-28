@@ -10,44 +10,22 @@ public class LevelSelectState implements GameState {
 
 	private final JAVA_Archive game;
 	private Image background, arrowLeft, arrowRight;
-	private Image[] titles;
+
 	private enum Mode {
 		LEVEL_SELECT, DIFFICULTY_SELECT
 	}
-	public enum Difficulty {
-	    Easy,
-	    Hard,
-	    Extreme;
 
-	    public Difficulty next() {
-	        int next = ordinal() + 1;
-	        if (next >= values().length) {
-	            next = values().length - 1;
-	        }
-	        return values()[next];
-	    }
 
-	    public Difficulty prev() {
-	        int prev = ordinal() - 1;
-	        if (prev < 0) {
-	            prev = 0;
-	        }
-	        return values()[prev];
-	    }
-	}
 	private Mode mode = Mode.LEVEL_SELECT;
-	private int index = 0;
-	private Difficulty difficulty = Difficulty.Easy;
-	
-	private final String[] samples = { "/sample_unwelcomeSchool.wav", "/sample_afterSchoolDessert.wav",
-			"/sample_comingSoon.wav" };
+	private Level level = Level.unwelcomeSchool;
+	public Difficulty difficulty = Difficulty.Easy;
 
 	public LevelSelectState(JAVA_Archive game) {
 		this.game = game;
 	}
 
 	private void playSample() {
-		game.getContext().bgm.play(samples[index], true);
+		game.getContext().bgm.play(level.getSamplePath(), true);
 	}
 
 	@Override
@@ -57,10 +35,6 @@ public class LevelSelectState implements GameState {
 		arrowLeft = am.getImage("arrow_left");
 		arrowRight = am.getImage("arrow_right");
 
-		titles = new Image[] { am.getImage("title_unwelcome"), am.getImage("title_after"),
-				am.getImage("title_coming") };
-
-		index = 0;
 		playSample();
 	}
 
@@ -72,12 +46,14 @@ public class LevelSelectState implements GameState {
 	public void render(Graphics2D g) {
 
 		g.drawImage(background, 0, 0, null);
-		g.drawImage(titles[index], 312, 80, null);
+
+		Image titleImage = AssetManager.getInstance().getImage(level.getTitleImageKey());
+		g.drawImage(titleImage, 312, 80, null);
 
 		if (mode == Mode.LEVEL_SELECT) {
-			if (index > 0)
+			if (level.ordinal() > 0)
 				g.drawImage(arrowLeft, 77, 225, null);
-			if (index < titles.length - 1)
+			if (level.ordinal() < Level.values().length - 1)
 				g.drawImage(arrowRight, 713, 225, null);
 		}
 
@@ -102,40 +78,35 @@ public class LevelSelectState implements GameState {
 			if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
 				game.changeState(new IntroState(game));
 				return;
-			}
-			if (e.getKeyCode() == KeyEvent.VK_LEFT && index > 0) {
-				index--;
+			} else if (e.getKeyCode() == KeyEvent.VK_LEFT) {
+				level = level.prev();
 				playSample();
-			}
-			if (e.getKeyCode() == KeyEvent.VK_RIGHT && index < titles.length - 1) {
-				index++;
+			} else if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
+				level = level.next();
 				playSample();
-			}
-			if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+			} else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
 				mode = Mode.DIFFICULTY_SELECT;
 			}
 		}
 		if (mode == Mode.DIFFICULTY_SELECT) {
 			if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
 				mode = Mode.LEVEL_SELECT;
-			}
-			if (e.getKeyCode() == KeyEvent.VK_UP) {
+				difficulty = Difficulty.Easy;
+			} else if (e.getKeyCode() == KeyEvent.VK_UP) {
 				difficulty = difficulty.next();
-			}
-			if (e.getKeyCode() == KeyEvent.VK_DOWN) {
+			} else if (e.getKeyCode() == KeyEvent.VK_DOWN) {
 				difficulty = difficulty.prev();
-			}
-			if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-				// Game Start
+			} else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+				// game.changeState(new GamePlayState(game, level, difficulty));
 			}
 		}
-		
+
 	}
-	
+
 	@Override
 	public void keyReleased(KeyEvent e) {
 		if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-			
+
 		}
 	}
 

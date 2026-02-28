@@ -26,7 +26,7 @@ public class AssetManager {
 		java.net.URL url = getClass().getResource(path);
 
 		if (url == null) {
-			System.err.println("❌ Image resource not found: " + path);
+			System.err.println("[AssetManager] Image resource not found: " + path);
 			return;
 		}
 
@@ -48,7 +48,7 @@ public class AssetManager {
 			}
 			br.close();
 		} catch (Exception e) {
-			System.err.println("Text load failed: " + path);
+			System.err.println("[AssetManager] Text load failed: " + path);
 			e.printStackTrace();
 		}
 
