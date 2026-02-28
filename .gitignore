@@ -12,7 +12,7 @@
 
 # Package Files #
 *.jar
-!lib/jlayer.jar
+!lib/jl1.0.1.jar
 *.war
 *.nar
 *.ear
