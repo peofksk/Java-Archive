@@ -5,59 +5,63 @@ import javax.swing.Timer;
 
 public class JAVA_Archive extends JFrame {
 
-    private GameState currentState;
-    private GamePanel panel;
-    private Timer gameTimer;
-    private long lastTime;
+	private static final long serialVersionUID = 1L;
 
-    private final GameContext context = new GameContext();
+	private GameState currentState;
+	private GamePanel panel;
+	private Timer gameTimer;
+	private long lastTime;
 
-    public JAVA_Archive() {
-        setTitle("JAVA_Archive");
-        setSize(1024, 576);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setResizable(false);
-        setLocationRelativeTo(null);
+	private final GameContext context = new GameContext();
 
-        panel = new GamePanel(this);
-        setContentPane(panel);
+	public JAVA_Archive() {
+		setTitle("JAVA_Archive");
+		setSize(1024, 576);
+		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		setResizable(false);
+		setLocationRelativeTo(null);
 
-        setVisible(true);
-        panel.requestFocusInWindow();
+		panel = new GamePanel(this);
+		setContentPane(panel);
 
-        startGameLoop();
-        changeState(new IntroState(this));
-    }
+		setVisible(true);
+		panel.requestFocusInWindow();
 
-    private void startGameLoop() {
-        lastTime = System.nanoTime();
+		startGameLoop();
+		changeState(new IntroState(this));
+	}
 
-        gameTimer = new Timer(16, e -> {
-            long now = System.nanoTime();
-            double deltaTime = (now - lastTime) / 1_000_000_000.0;
-            lastTime = now;
+	private void startGameLoop() {
+		lastTime = System.nanoTime();
 
-            if (currentState != null) {
-                currentState.update(deltaTime);
-            }
+		gameTimer = new Timer(16, e -> {
+			long now = System.nanoTime();
+			double deltaTime = (now - lastTime) / 1_000_000_000.0;
+			lastTime = now;
 
-            panel.repaint();
-        });
+			if (currentState != null) {
+				currentState.update(deltaTime);
+			}
 
-        gameTimer.start();
-    }
+			panel.repaint();
+		});
 
-    public void changeState(GameState next) {
-        if (currentState != null) currentState.exit();
-        currentState = next;
-        if (currentState != null) currentState.enter();
-    }
+		gameTimer.start();
+	}
 
-    public GameState getCurrentState() {
-        return currentState;
-    }
+	public void changeState(GameState next) {
+		if (currentState != null)
+			currentState.exit();
+		currentState = next;
+		if (currentState != null)
+			currentState.enter();
+	}
 
-    public GameContext getContext() {
-        return context;
-    }
+	public GameState getCurrentState() {
+		return currentState;
+	}
+
+	public GameContext getContext() {
+		return context;
+	}
 }

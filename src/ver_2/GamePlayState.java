@@ -1,7 +1,5 @@
 package ver_2;
 
-import java.awt.Color;
-import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.event.KeyEvent;
@@ -9,9 +7,11 @@ import java.awt.event.KeyEvent;
 public class GamePlayState implements GameState {
 
 	private final JAVA_Archive game;
-
-	private final Level level;
+	private final AssetManager am = AssetManager.getInstance();
+	private final Stage stage;
 	private final Difficulty difficulty;
+
+	private Image background;
 
 	private boolean started = false;
 	private boolean paused = false;
@@ -24,19 +24,19 @@ public class GamePlayState implements GameState {
 	private int combo = 0;
 	private int maxCombo = 0;
 
-	public GamePlayState(JAVA_Archive game, Level level, Difficulty difficulty) {
+	public GamePlayState(JAVA_Archive game, Stage stage, Difficulty difficulty) {
 		this.game = game;
-		this.level = level;
+		this.stage = stage;
 		this.difficulty = difficulty;
+		background = am.getImage(stage.getBackgroundImageKey());
 	}
 
 	@Override
-    public void enter() {
-    	AssetManager am = AssetManager.getInstance();
-    	Image background = am.getImage("");
-    	startMusic();
-        started = true;
-    }
+	public void enter() {
+
+		startMusic();
+		started = true;
+	}
 
 	@Override
 	public void exit() {
@@ -55,7 +55,7 @@ public class GamePlayState implements GameState {
 
 	@Override
 	public void render(Graphics2D g) {
-
+		g.drawImage(background, 0, 0, null);
 	}
 
 	@Override
@@ -80,7 +80,7 @@ public class GamePlayState implements GameState {
 	}
 
 	private void startMusic() {
-		game.getContext().bgm.play(level.getMusicPath(), false);
+		game.getContext().bgm.play(stage.getMusicPath(), false);
 	}
 
 }

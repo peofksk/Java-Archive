@@ -8,7 +8,9 @@ import java.awt.event.KeyListener;
 
 public class GamePanel extends JPanel implements KeyListener {
 
-    private final JAVA_Archive game;
+	private static final long serialVersionUID = 1L;
+	
+	private final JAVA_Archive game;
 
     public GamePanel(JAVA_Archive game) {
         this.game = game;
