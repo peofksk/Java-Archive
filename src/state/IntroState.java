@@ -1,8 +1,12 @@
-package ver_2;
+package state;
 
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.event.KeyEvent;
+
+import app.JAVA_Archive;
+import asset.AssetManager;
+import core.GameState;
 
 public class IntroState implements GameState {
 

@@ -1,4 +1,4 @@
-package ver_2;
+package audio;
 
 import javax.sound.sampled.*;
 import java.io.BufferedInputStream;

@@ -1,4 +1,4 @@
-package ver_2;
+package asset;
 
 import java.awt.Image;
 import java.io.BufferedReader;

@@ -1,7 +1,12 @@
-package ver_2;
+package app;
 
 import javax.swing.JFrame;
 import javax.swing.Timer;
+
+import core.GameContext;
+import core.GamePanel;
+import core.GameState;
+import state.IntroState;
 
 public class JAVA_Archive extends JFrame {
 

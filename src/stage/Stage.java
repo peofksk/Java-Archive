@@ -1,4 +1,4 @@
-package ver_2;
+package stage;
 
 public class Stage {
 

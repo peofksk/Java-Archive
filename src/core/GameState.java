@@ -1,4 +1,4 @@
-package ver_2;
+package core;
 
 import java.awt.Graphics2D;
 import java.awt.event.KeyEvent;

@@ -1,10 +1,13 @@
-package ver_2;
+package core;
 
-import javax.swing.JPanel;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+
+import javax.swing.JPanel;
+
+import app.JAVA_Archive;
 
 public class GamePanel extends JPanel implements KeyListener {
 

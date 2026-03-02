@@ -1,4 +1,4 @@
-package ver_2;
+package audio;
 
 import java.io.BufferedInputStream;
 import java.io.InputStream;

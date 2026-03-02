@@ -1,4 +1,4 @@
-package ver_2;
+package stage;
 
 import java.util.HashMap;
 import java.util.Map;

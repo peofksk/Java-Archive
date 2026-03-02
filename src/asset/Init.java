@@ -1,4 +1,4 @@
-package ver_2;
+package asset;
 
 public class Init {
 

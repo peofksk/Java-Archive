@@ -1,6 +1,8 @@
-package ver_2;
+package app;
 
 import javax.swing.SwingUtilities;
+
+import asset.Init;
 
 public class Main {
 	

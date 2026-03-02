@@ -1,4 +1,6 @@
-package ver_2;
+package core;
+
+import audio.BGMManager;
 
 public class GameContext {
     public BGMManager bgm = new BGMManager();
