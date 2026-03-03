@@ -62,7 +62,7 @@ public class LevelSelectState implements GameState {
 			g.drawImage(pressEnter, 357, 500, null);
 			if (sm.hasPrev())
 				g.drawImage(arrowLeft, 77, 225, null);
-			if (sm.hasPrev())
+			if (sm.hasNext())
 				g.drawImage(arrowRight, 713, 225, null);
 		}
 
