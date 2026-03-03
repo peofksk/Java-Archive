@@ -6,15 +6,16 @@ import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.event.KeyEvent;
 
-import app.JAVA_Archive;
 import asset.AssetManager;
+import core.GameContext;
 import core.GameState;
 import stage.Difficulty;
 import stage.StageManager;
+import state.gameplay.GamePlayState;
 
 public class LevelSelectState implements GameState {
 
-	private final JAVA_Archive game;
+	private final GameContext context;
 	private final StageManager sm = new StageManager();
 	private Image background, arrowLeft, arrowRight, pressEnter;
 
@@ -26,12 +27,12 @@ public class LevelSelectState implements GameState {
 
 	public Difficulty difficulty = Difficulty.Easy;
 
-	public LevelSelectState(JAVA_Archive game) {
-		this.game = game;
+	public LevelSelectState(GameContext context) {
+		this.context = context;
 	}
 
 	private void playSample() {
-		game.getContext().bgm.play(sm.getCurrentStage().getSamplePath(), true);
+		context.bgm.play(sm.getCurrentStage().getSamplePath(), true);
 	}
 
 	@Override
@@ -84,7 +85,7 @@ public class LevelSelectState implements GameState {
 	public void keyPressed(KeyEvent e) {
 		if (mode == Mode.LEVEL_SELECT) {
 			if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
-				game.changeState(new IntroState(game));
+				context.changeState(new IntroState(context));
 				return;
 			} else if (e.getKeyCode() == KeyEvent.VK_LEFT && sm.hasPrev()) {
 				sm.prev();
@@ -104,7 +105,7 @@ public class LevelSelectState implements GameState {
 			} else if (e.getKeyCode() == KeyEvent.VK_DOWN) {
 				difficulty = difficulty.prev();
 			} else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-				game.changeState(new GamePlayState(game, sm.getCurrentStage(), difficulty));
+				context.changeState(new GamePlayState(context, sm.getCurrentStage(), difficulty));
 			}
 		}
 

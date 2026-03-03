@@ -5,8 +5,12 @@
 /afterSchoolDessert.wav
 /afterSchoolDessertBackground.png
 /afterSchoolDessert_Hard.txt
+/app/
 /arrowLeft.png
 /arrowRight.png
+/asset/
+/audio/
+/core/
 /corner.png
 /correction.txt
 /correctionBackground.png
@@ -56,6 +60,8 @@
 /sample_unwelcomeSchool.mp3
 /sample_unwelcomeSchool.wav
 /selectionBackground.png
+/stage/
+/state/
 /test.png
 /testGameBackground.png
 /testMusicTitle.png
@@ -66,10 +72,3 @@
 /unwelcomeSchool_Extreme.txt
 /unwelcomeSchool_Hard.txt
 /ver_1/
-/ver_2/
-/app/
-/core/
-/state/
-/stage/
-/audio/
-/asset/

@@ -4,17 +4,17 @@ import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.event.KeyEvent;
 
-import app.JAVA_Archive;
 import asset.AssetManager;
+import core.GameContext;
 import core.GameState;
 
 public class IntroState implements GameState {
 
-	private final JAVA_Archive game;
+	private final GameContext context;
 	private Image background, title, pressEnter;
 
-	public IntroState(JAVA_Archive game) {
-		this.game = game;
+	public IntroState(GameContext context) {
+		this.context = context;
 	}
 
 	@Override
@@ -24,7 +24,7 @@ public class IntroState implements GameState {
 		title = am.getImage("game_title");
 		pressEnter = am.getImage("press_enter");
 
-		game.getContext().bgm.play("/introMusic.wav", true);
+		context.bgm.play("/introMusic.wav", true);
 	}
 
 	@Override
@@ -44,12 +44,12 @@ public class IntroState implements GameState {
 			System.exit(0);
 		}
 		if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-			game.changeState(new LevelSelectState(game));
+			context.changeState(new LevelSelectState(context));
 		}
 	}
 
 	@Override
 	public void exit() {
-		game.getContext().bgm.stop();
+		context.bgm.stop();
 	}
 }

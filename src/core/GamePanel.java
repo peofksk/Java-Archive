@@ -7,16 +7,14 @@ import java.awt.event.KeyListener;
 
 import javax.swing.JPanel;
 
-import app.JAVA_Archive;
-
 public class GamePanel extends JPanel implements KeyListener {
 
 	private static final long serialVersionUID = 1L;
 	
-	private final JAVA_Archive game;
+	private final GameContext context;
 
-    public GamePanel(JAVA_Archive game) {
-        this.game = game;
+    public GamePanel(GameContext context) {
+        this.context = context;
         setFocusable(true);
         addKeyListener(this);
     }
@@ -24,21 +22,21 @@ public class GamePanel extends JPanel implements KeyListener {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        if (game.getCurrentState() != null) {
-            game.getCurrentState().render((Graphics2D) g);
+        if (context.getCurrentState() != null) {
+            context.getCurrentState().render((Graphics2D) g);
         }
     }
 
     @Override
     public void keyPressed(KeyEvent e) {
-        if (game.getCurrentState() != null)
-            game.getCurrentState().keyPressed(e);
+        if (context.getCurrentState() != null)
+            context.getCurrentState().keyPressed(e);
     }
 
     @Override
     public void keyReleased(KeyEvent e) {
-        if (game.getCurrentState() != null)
-            game.getCurrentState().keyReleased(e);
+        if (context.getCurrentState() != null)
+            context.getCurrentState().keyReleased(e);
     }
 
     @Override

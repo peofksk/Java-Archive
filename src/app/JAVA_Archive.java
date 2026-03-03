@@ -26,14 +26,14 @@ public class JAVA_Archive extends JFrame {
 		setResizable(false);
 		setLocationRelativeTo(null);
 
-		panel = new GamePanel(this);
+		panel = new GamePanel(context);
 		setContentPane(panel);
 
 		setVisible(true);
 		panel.requestFocusInWindow();
 
 		startGameLoop();
-		changeState(new IntroState(this));
+		context.changeState(new IntroState(context));
 	}
 
 	private void startGameLoop() {
@@ -54,19 +54,5 @@ public class JAVA_Archive extends JFrame {
 		gameTimer.start();
 	}
 
-	public void changeState(GameState next) {
-		if (currentState != null)
-			currentState.exit();
-		currentState = next;
-		if (currentState != null)
-			currentState.enter();
-	}
-
-	public GameState getCurrentState() {
-		return currentState;
-	}
-
-	public GameContext getContext() {
-		return context;
-	}
+	
 }

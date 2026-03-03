@@ -13,9 +13,9 @@ public class StageManager {
 	}
 
 	private void loadStages() {
-		stages.add(new Stage("title_unwelcome", "/sample_unwelcomeSchool.wav", "/unwelcomeSchool.wav", "stage_unwelcomeSchool_bg", null));
+		stages.add(new Stage("title_unwelcome", "/sample_unwelcomeSchool.wav", "/unwelcomeSchool.wav", "stage_unwelcomeSchool_bg", "note_unwelcomeSchool_"));
 
-		stages.add(new Stage("title_after", "/sample_afterSchoolDessert.wav", "/afterSchoolDessert.wav", "stage_afterSchoolDessert_bg", null));
+		stages.add(new Stage("title_after", "/sample_afterSchoolDessert.wav", "/afterSchoolDessert.wav", "stage_afterSchoolDessert_bg", "note_afterSchoolDessert_"));
 
 		stages.add(new Stage("title_coming", "/sample_comingSoon.wav", "/comingSoon.wav", "stage_comingSoon_bg", null));
 	}
