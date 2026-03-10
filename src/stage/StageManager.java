@@ -13,11 +13,17 @@ public class StageManager {
 	}
 
 	private void loadStages() {
-		stages.add(new Stage("title_unwelcome", "/sample_unwelcomeSchool.wav", "/unwelcomeSchool.wav", "stage_unwelcomeSchool_bg", "note_unwelcomeSchool_"));
 
-		stages.add(new Stage("title_after", "/sample_afterSchoolDessert.wav", "/afterSchoolDessert.wav", "stage_afterSchoolDessert_bg", "note_afterSchoolDessert_"));
+		addStage("unwelcomeSchool");
+		addStage("afterSchoolDessert");
+		addStage("comingSoon");
 
-		stages.add(new Stage("title_coming", "/sample_comingSoon.wav", "/comingSoon.wav", "stage_comingSoon_bg", null));
+	}
+
+	private void addStage(String name) {
+
+		stages.add(new Stage(name, "title_" + name, "/sample_" + name + ".wav", "/" + name + ".wav",
+				"stage_" + name + "_bg", "note_" + name + "_", null));
 	}
 
 	public Stage getCurrentStage() {

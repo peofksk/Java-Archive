@@ -2,20 +2,28 @@ package stage;
 
 public class Stage {
 
+	private final String levelName;
     private final String titleImageKey;
     private final String samplePath;
     private final String musicPath;
     private final String backgroundImageKey;
     private final String noteFilePath;
+    private final String noteColor;
 
-    public Stage (String titleImageKey, String sampleMusicPath, String musicPath, String backgroundImageKey, String noteFilePath) {
-        this.titleImageKey = titleImageKey;
+    public Stage (String levelName, String titleImageKey, String sampleMusicPath, String musicPath, String backgroundImageKey, String noteFilePath, String noteColor) {
+        this.levelName = levelName;
+    	this.titleImageKey = titleImageKey;
         this.samplePath = sampleMusicPath;
         this.musicPath = musicPath;
         this.backgroundImageKey = backgroundImageKey;
         this.noteFilePath = noteFilePath;
+        this.noteColor = noteColor;
     }
 
+    
+    public String getLevelName() {
+    	return levelName;
+    }
     public String getTitleImageKey() {
         return titleImageKey;
     }
@@ -32,5 +40,9 @@ public class Stage {
     }
     public String getNotefilePath() {
     	return noteFilePath;
+    }
+    
+    public String getNoteColor() {
+    	return noteColor;
     }
 }

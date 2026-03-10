@@ -105,7 +105,14 @@ public class LevelSelectState implements GameState {
 			} else if (e.getKeyCode() == KeyEvent.VK_DOWN) {
 				difficulty = difficulty.prev();
 			} else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-				context.changeState(new GamePlayState(context, sm.getCurrentStage(), difficulty));
+				GamePlayState next = new GamePlayState(context, sm.getCurrentStage(), difficulty);
+				
+				context.changeState(new LoadState(
+				        context,
+				        "Loading Game...",
+				        () -> next.preload(),
+				        () -> next
+				));
 			}
 		}
 

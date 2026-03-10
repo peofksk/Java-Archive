@@ -12,7 +12,6 @@ public class JAVA_Archive extends JFrame {
 
 	private static final long serialVersionUID = 1L;
 
-	private GameState currentState;
 	private GamePanel panel;
 	private Timer gameTimer;
 	private long lastTime;
@@ -32,8 +31,8 @@ public class JAVA_Archive extends JFrame {
 		setVisible(true);
 		panel.requestFocusInWindow();
 
-		startGameLoop();
 		context.changeState(new IntroState(context));
+		startGameLoop();
 	}
 
 	private void startGameLoop() {
@@ -44,8 +43,8 @@ public class JAVA_Archive extends JFrame {
 			double deltaTime = (now - lastTime) / 1_000_000_000.0;
 			lastTime = now;
 
-			if (currentState != null) {
-				currentState.update(deltaTime);
+			if (context.getCurrentState() != null) {
+				context.getCurrentState().update(deltaTime);
 			}
 
 			panel.repaint();
