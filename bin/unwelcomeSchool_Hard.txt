@@ -1,6 +1,6 @@
 BPM 180
 
-OFFSET 0.1
+OFFSET 0
 
 0.0 D
 0.0 J

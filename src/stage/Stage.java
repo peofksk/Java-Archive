@@ -38,7 +38,7 @@ public class Stage {
     public String getBackgroundImageKey() {
     	return backgroundImageKey;
     }
-    public String getNotefilePath() {
+    public String getNoteFilePath() {
     	return noteFilePath;
     }
     

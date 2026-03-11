@@ -10,13 +10,12 @@ import asset.AssetManager;
 import core.GameContext;
 import core.GameState;
 import stage.Difficulty;
-import stage.StageManager;
 import state.gameplay.GamePlayState;
 
 public class LevelSelectState implements GameState {
 
 	private final GameContext context;
-	private final StageManager sm = new StageManager();
+	private final AssetManager am = AssetManager.getInstance();
 	private Image background, arrowLeft, arrowRight, pressEnter;
 
 	private enum Mode {
@@ -25,23 +24,22 @@ public class LevelSelectState implements GameState {
 
 	private Mode mode = Mode.LEVEL_SELECT;
 
-	public Difficulty difficulty = Difficulty.Easy;
-
 	public LevelSelectState(GameContext context) {
 		this.context = context;
 	}
 
 	private void playSample() {
-		context.bgm.play(sm.getCurrentStage().getSamplePath(), true);
+		context.bgm.play(context.sm.getCurrentStage().getSamplePath(), true);
 	}
 
 	@Override
 	public void enter() {
-		AssetManager am = AssetManager.getInstance();
 		background = am.getImage("selection_bg");
 		arrowLeft = am.getImage("arrow_left");
 		arrowRight = am.getImage("arrow_right");
 		pressEnter = am.getImage("press_enter");
+		
+		context.setCurrentDifficulty(Difficulty.Easy);
 
 		playSample();
 	}
@@ -55,14 +53,14 @@ public class LevelSelectState implements GameState {
 
 		g.drawImage(background, 0, 0, null);
 
-		Image titleImage = AssetManager.getInstance().getImage(sm.getCurrentStage().getTitleImageKey());
+		Image titleImage = AssetManager.getInstance().getImage(context.sm.getCurrentStage().getTitleImageKey());
 		g.drawImage(titleImage, 312, 80, null);
 
 		if (mode == Mode.LEVEL_SELECT) {
 			g.drawImage(pressEnter, 357, 500, null);
-			if (sm.hasPrev())
+			if (context.sm.hasPrev())
 				g.drawImage(arrowLeft, 77, 225, null);
-			if (sm.hasNext())
+			if (context.sm.hasNext())
 				g.drawImage(arrowRight, 713, 225, null);
 		}
 
@@ -71,13 +69,13 @@ public class LevelSelectState implements GameState {
 			g.setColor(Color.CYAN);
 			g.drawString("Please set difficulty: ", 300, 530);
 			g.setFont(new Font("SansSerif", Font.BOLD, 35));
-			if (difficulty == Difficulty.Easy)
+			if (context.getCurrentDifficulty() == Difficulty.Easy)
 				g.setColor(Color.GREEN);
-			else if (difficulty == Difficulty.Hard)
+			else if (context.getCurrentDifficulty() == Difficulty.Hard)
 				g.setColor(Color.ORANGE);
-			else if (difficulty == Difficulty.Extreme)
+			else if (context.getCurrentDifficulty() == Difficulty.Extreme)
 				g.setColor(Color.RED);
-			g.drawString(difficulty.name(), 630, 530);
+			g.drawString(context.getCurrentDifficulty().name(), 630, 530);
 		}
 	}
 
@@ -87,11 +85,13 @@ public class LevelSelectState implements GameState {
 			if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
 				context.changeState(new IntroState(context));
 				return;
-			} else if (e.getKeyCode() == KeyEvent.VK_LEFT && sm.hasPrev()) {
-				sm.prev();
+			} else if (e.getKeyCode() == KeyEvent.VK_C) {
+				context.changeState(new CorrectionState(context, context.sm.getCurrentCorrectionConfig()));
+			} else if (e.getKeyCode() == KeyEvent.VK_LEFT && context.sm.hasPrev()) {
+				context.sm.prev();
 				playSample();
-			} else if (e.getKeyCode() == KeyEvent.VK_RIGHT && sm.hasNext()) {
-				sm.next();
+			} else if (e.getKeyCode() == KeyEvent.VK_RIGHT && context.sm.hasNext()) {
+				context.sm.next();
 				playSample();
 			} else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
 				mode = Mode.DIFFICULTY_SELECT;
@@ -99,20 +99,15 @@ public class LevelSelectState implements GameState {
 		} else if (mode == Mode.DIFFICULTY_SELECT) {
 			if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
 				mode = Mode.LEVEL_SELECT;
-				difficulty = Difficulty.Easy;
+				context.setCurrentDifficulty(context.getCurrentDifficulty().initialize());
 			} else if (e.getKeyCode() == KeyEvent.VK_UP) {
-				difficulty = difficulty.next();
+				context.setCurrentDifficulty(context.getCurrentDifficulty().next());
 			} else if (e.getKeyCode() == KeyEvent.VK_DOWN) {
-				difficulty = difficulty.prev();
+				context.setCurrentDifficulty(context.getCurrentDifficulty().prev());
 			} else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-				GamePlayState next = new GamePlayState(context, sm.getCurrentStage(), difficulty);
-				
-				context.changeState(new LoadState(
-				        context,
-				        "Loading Game...",
-				        () -> next.preload(),
-				        () -> next
-				));
+				GamePlayState next = new GamePlayState(context, context.sm.getCurrentStage(), context.getCurrentDifficulty());
+
+				context.changeState(new LoadState(context, "Loading Game...", () -> next.preload(), () -> next));
 			}
 		}
 

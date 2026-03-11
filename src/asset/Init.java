@@ -32,7 +32,7 @@ public class Init {
 		am.loadImage("judgement_line", "/judgement_line.png");
 		am.loadImage("note_image", "/note_0.png");
 		
-		
+		am.loadText("note_correction", "/correction.txt");
 		am.loadText("note_unwelcomeSchool_easy", "/unwelcomeSchool_Easy.txt");
 		am.loadText("note_unwelcomeSchool_hard", "/unwelcomeSchool_Hard.txt");
 		am.loadText("note_unwelcomeSchool_extreme", "/unwelcomeSchool_Extreme.txt");

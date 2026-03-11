@@ -3,6 +3,9 @@ package stage;
 public enum Difficulty {
 	Easy, Hard, Extreme;
 
+	public Difficulty initialize() {
+		return values()[0];
+	}
 	public Difficulty next() {
 		int next = ordinal() + 1;
 		if (next >= values().length) {

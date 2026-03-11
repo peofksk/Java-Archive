@@ -50,13 +50,6 @@ public class GamePlayState implements GameState {
     private String lastJudge = "";
     private float alpha = 0.0f;
 
-    private int missCount = 0;
-    private int lateCount = 0;
-    private int earlyCount = 0;
-    private int goodCount = 0;
-    private int greatCount = 0;
-    private int perfectCount = 0;
-
     private double accuracy = 100.0;
     private int totalNoteCount = 1;
 
@@ -113,13 +106,6 @@ public class GamePlayState implements GameState {
 
         lastJudge = "";
         alpha = 0.0f;
-
-        missCount = 0;
-        lateCount = 0;
-        earlyCount = 0;
-        goodCount = 0;
-        greatCount = 0;
-        perfectCount = 0;
 
         accuracy = 100.0;
 
@@ -311,7 +297,6 @@ public class GamePlayState implements GameState {
         long now = System.nanoTime();
         long pausedDuration = now - pauseStartNano;
 
-        // 곡 기준 시각을 pause만큼 뒤로 밀어줘야 화면 시간이 그대로 이어짐
         songStartNano += pausedDuration;
 
         paused = false;
@@ -327,42 +312,36 @@ public class GamePlayState implements GameState {
                 score -= 10;
                 combo = 0;
                 lastJudge = "Miss";
-                missCount++;
                 accuracy -= 100.0 / totalNoteCount;
             }
             case LATE -> {
                 score += 5;
                 combo += 1;
                 lastJudge = "Late";
-                lateCount++;
                 accuracy -= (100.0 / totalNoteCount) * 0.08;
             }
             case EARLY -> {
                 score += 10;
                 combo += 1;
                 lastJudge = "Early";
-                earlyCount++;
                 accuracy -= (100.0 / totalNoteCount) * 0.06;
             }
             case GOOD -> {
                 score += 20;
                 combo += 1;
                 lastJudge = "Good";
-                goodCount++;
                 accuracy -= (100.0 / totalNoteCount) * 0.04;
             }
             case GREAT -> {
                 score += 30;
                 combo += 1;
                 lastJudge = "Great";
-                greatCount++;
                 accuracy -= (100.0 / totalNoteCount) * 0.02;
             }
             case PERFECT -> {
                 score += 50;
                 combo += 1;
                 lastJudge = "Perfect";
-                perfectCount++;
             }
             case NONE -> {
                 return;
@@ -432,7 +411,7 @@ public class GamePlayState implements GameState {
     }
 
     private float getAlpha() {
-        alpha = Math.max(alpha - 0.005f, 0f);
+        alpha = Math.max(alpha - 0.02f, 0f);
         return alpha;
     }
 
