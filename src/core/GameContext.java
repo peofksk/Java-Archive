@@ -9,6 +9,7 @@ public class GameContext {
     public StageManager sm = new StageManager();
     private GameState currentState;
     private Difficulty currentDifficulty = Difficulty.Easy;
+    private double GLOBAL_OFFSET = 0.0;
     
     public void changeState(GameState next) {
 		if (currentState != null)
@@ -30,4 +31,11 @@ public class GameContext {
 		this.currentDifficulty = currentDifficulty;
 	}
 
+	public double getGlobalOffset() {
+		return GLOBAL_OFFSET;
+	}
+
+	public void setGlobalOffset(double newGlobalOffset) {
+		this.GLOBAL_OFFSET = newGlobalOffset;
+	}
 }

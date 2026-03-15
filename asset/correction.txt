@@ -1,4 +1,20 @@
-8 Space
-12 Space
-16 Space
-40 Space
+BPM 112
+
+OFFSET 0
+0 D
+2 D
+4 D
+6 D
+8 D
+10 D
+12 D
+14 D
+16 D
+18 D
+20 D
+22 D
+24 D
+26 D
+28 D
+30 D
+32 D

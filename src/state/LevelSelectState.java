@@ -38,7 +38,7 @@ public class LevelSelectState implements GameState {
 		arrowLeft = am.getImage("arrow_left");
 		arrowRight = am.getImage("arrow_right");
 		pressEnter = am.getImage("press_enter");
-		
+
 		context.setCurrentDifficulty(Difficulty.Easy);
 
 		playSample();
@@ -86,7 +86,8 @@ public class LevelSelectState implements GameState {
 				context.changeState(new IntroState(context));
 				return;
 			} else if (e.getKeyCode() == KeyEvent.VK_C) {
-				context.changeState(new CorrectionState(context, context.sm.getCurrentCorrectionConfig()));
+				CorrectionState next = new CorrectionState(context, context.sm.getCurrentCorrectionConfig());
+				context.changeState(new LoadState(context, "Loading Calibration...", next::preload, () -> next));
 			} else if (e.getKeyCode() == KeyEvent.VK_LEFT && context.sm.hasPrev()) {
 				context.sm.prev();
 				playSample();
@@ -105,7 +106,8 @@ public class LevelSelectState implements GameState {
 			} else if (e.getKeyCode() == KeyEvent.VK_DOWN) {
 				context.setCurrentDifficulty(context.getCurrentDifficulty().prev());
 			} else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-				GamePlayState next = new GamePlayState(context, context.sm.getCurrentStage(), context.getCurrentDifficulty());
+				GamePlayState next = new GamePlayState(context, context.sm.getCurrentStage(),
+						context.getCurrentDifficulty());
 
 				context.changeState(new LoadState(context, "Loading Game...", () -> next.preload(), () -> next));
 			}

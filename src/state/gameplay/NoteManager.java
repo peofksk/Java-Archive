@@ -7,15 +7,17 @@ import java.util.List;
 import java.util.Map;
 
 import asset.AssetManager;
+import core.GameContext;
 
 public class NoteManager {
 
+	private final GameContext context;
     private final Map<Lane, List<Note>> laneNotes = new EnumMap<>(Lane.class);
 
     private static final double PERFECT_WINDOW = 0.08;
-    private static final double GREAT_WINDOW = 0.11;
-    private static final double GOOD_WINDOW = 0.14;
-    private static final double EARLY_LATE_WINDOW = 0.17;
+    private static final double GREAT_WINDOW = 0.10;
+    private static final double GOOD_WINDOW = 0.13;
+    private static final double EARLY_LATE_WINDOW = 0.15;
     private static final double MISS_WINDOW = 0.20;
 
     private final AssetManager am = AssetManager.getInstance();
@@ -23,7 +25,11 @@ public class NoteManager {
     private double bpm = 120.0;
     private double offset = 0.0;
 
-    public NoteManager() {
+    private double lastHitTimeDiffSeconds = 0.0;
+
+    public NoteManager(GameContext context) {
+    	this.context = context;
+   
         for (Lane lane : Lane.values()) {
             laneNotes.put(lane, new ArrayList<>());
         }
@@ -48,6 +54,7 @@ public class NoteManager {
 
         bpm = 120.0;
         offset = 0.0;
+        lastHitTimeDiffSeconds = 0.0;
 
         double secondsPerBeat = 60.0 / bpm;
 
@@ -68,11 +75,6 @@ public class NoteManager {
             if (parts[0].equalsIgnoreCase("BPM")) {
                 bpm = Double.parseDouble(parts[1]);
                 secondsPerBeat = 60.0 / bpm;
-                continue;
-            }
-
-            if (parts[0].equalsIgnoreCase("OFFSET")) {
-                offset = Double.parseDouble(parts[1]);
                 continue;
             }
 
@@ -133,6 +135,8 @@ public class NoteManager {
         Note note = notes.get(0);
 
         double diff = currentTime - note.getHitTime();
+        lastHitTimeDiffSeconds = diff;
+
         double absDiff = Math.abs(diff);
 
         if (absDiff <= PERFECT_WINDOW) {
@@ -160,6 +164,10 @@ public class NoteManager {
         }
 
         return Judgement.NONE;
+    }
+
+    public double getLastHitTimeDiffSeconds() {
+        return lastHitTimeDiffSeconds;
     }
 
     public Map<Lane, List<Note>> getLaneNotes() {

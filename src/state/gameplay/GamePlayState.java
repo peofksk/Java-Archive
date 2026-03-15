@@ -33,7 +33,6 @@ public class GamePlayState implements GameState {
     private boolean musicThreadStarted = false;
 
     private static final double LEAD_IN = 3.0;
-    private static final double GLOBAL_OFFSET = 0.0;
 
     private static final double AUDIO_OUTPUT_LATENCY = 0.3;
 
@@ -68,7 +67,7 @@ public class GamePlayState implements GameState {
         judgementLine = am.getImage("judgement_line");
         noteImage = am.getImage("note_image");
 
-        nm = new NoteManager();
+        nm = new NoteManager(context);
         nm.loadChart("note_" + stage.getLevelName() + "_" + difficulty.name().toLowerCase());
 
         totalNoteCount = nm.getRemainingNoteCount();
@@ -110,6 +109,8 @@ public class GamePlayState implements GameState {
         accuracy = 100.0;
 
         startScheduledMusicThread();
+        
+        System.out.println(context.getGlobalOffset());
     }
 
     @Override
@@ -126,7 +127,7 @@ public class GamePlayState implements GameState {
         long now = System.nanoTime();
         elapsedTime = (now - songStartNano) / 1_000_000_000.0;
 
-        int missCountThisFrame = nm.update(elapsedTime + GLOBAL_OFFSET);
+        int missCountThisFrame = nm.update(elapsedTime + context.getGlobalOffset());
         for (int i = 0; i < missCountThisFrame; i++) {
             applyJudgement(Judgement.MISS);
         }
@@ -228,7 +229,7 @@ public class GamePlayState implements GameState {
         }
 
         Judgement result = Judgement.NONE;
-        double judgeTime = elapsedTime + GLOBAL_OFFSET;
+        double judgeTime = elapsedTime + context.getGlobalOffset();
 
         if (e.getKeyCode() == KeyEvent.VK_D) {
             result = nm.judge(Lane.D, judgeTime);

@@ -1,6 +1,6 @@
 BPM 160
 
-OFFSET 0.7
+OFFSET 0.5;
 
 3.5 D
 4.0 J
