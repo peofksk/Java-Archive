@@ -27,20 +27,19 @@ public class GamePlayState implements GameState {
 
     private boolean preloaded = false;
     private boolean started = false;
-    private boolean paused = false;
+    private volatile boolean paused = false;
     private boolean gameOver = false;
 
-    private boolean musicThreadStarted = false;
+    private volatile boolean musicThreadStarted = false;
+    private volatile boolean audioStarted = false;
 
     private static final double LEAD_IN = 3.0;
-
     private static final double AUDIO_OUTPUT_LATENCY = 0.3;
 
-    private double elapsedTime = -LEAD_IN;
-
-    private long songStartNano = 0L;
-
+    private volatile long songStartNano = 0L;
     private long pauseStartNano = 0L;
+
+    private double timelineTime = -LEAD_IN;
 
     private int score = 0;
     private int combo = 0;
@@ -91,8 +90,9 @@ public class GamePlayState implements GameState {
         long now = System.nanoTime();
         songStartNano = now + (long) (LEAD_IN * 1_000_000_000L);
 
-        elapsedTime = -LEAD_IN;
+        timelineTime = -LEAD_IN;
         musicThreadStarted = false;
+        audioStarted = false;
         started = true;
         paused = false;
         gameOver = false;
@@ -109,8 +109,6 @@ public class GamePlayState implements GameState {
         accuracy = 100.0;
 
         startScheduledMusicThread();
-        
-        System.out.println(context.getGlobalOffset());
     }
 
     @Override
@@ -124,15 +122,16 @@ public class GamePlayState implements GameState {
             return;
         }
 
-        long now = System.nanoTime();
-        elapsedTime = (now - songStartNano) / 1_000_000_000.0;
+        updateTimelineTime();
 
-        int missCountThisFrame = nm.update(elapsedTime + context.getGlobalOffset());
+        double gameplayTime = getGameplayTime();
+
+        int missCountThisFrame = nm.update(gameplayTime);
         for (int i = 0; i < missCountThisFrame; i++) {
             applyJudgement(Judgement.MISS);
         }
 
-        if (elapsedTime > 0 && nm.isFinished() && !context.bgm.isPlaying()) {
+        if (audioStarted && !context.bgm.isPlaying() && timelineTime > 0 && nm.isFinished()) {
             gameOver = true;
         }
     }
@@ -148,12 +147,14 @@ public class GamePlayState implements GameState {
         int startX = 30;
         double speed = 800;
 
+        double gameplayTime = getGameplayTime();
+
         for (Lane lane : Lane.values()) {
             int laneIndex = lane.ordinal();
             int x = startX + laneIndex * laneWidth;
 
             for (Note note : nm.getLaneNotes().get(lane)) {
-                double y = baseY - (note.getHitTime() - elapsedTime) * speed;
+                double y = baseY - (note.getHitTime() - gameplayTime) * speed;
                 g.drawImage(noteImage, x, (int) y, null);
             }
         }
@@ -228,8 +229,10 @@ public class GamePlayState implements GameState {
             return;
         }
 
+        updateTimelineTime();
+
         Judgement result = Judgement.NONE;
-        double judgeTime = elapsedTime + context.getGlobalOffset();
+        double judgeTime = getGameplayTime();
 
         if (e.getKeyCode() == KeyEvent.VK_D) {
             result = nm.judge(Lane.D, judgeTime);
@@ -248,6 +251,20 @@ public class GamePlayState implements GameState {
     public void keyReleased(KeyEvent e) {
     }
 
+    private void updateTimelineTime() {
+        if (audioStarted) {
+            timelineTime = context.bgm.getPositionSeconds();
+            return;
+        }
+
+        long now = System.nanoTime();
+        timelineTime = (now - songStartNano) / 1_000_000_000.0;
+    }
+
+    private double getGameplayTime() {
+        return timelineTime + context.getGlobalOffset() + stage.getMusicOffsetSeconds();
+    }
+
     private void startScheduledMusicThread() {
         if (musicThreadStarted) {
             return;
@@ -257,14 +274,18 @@ public class GamePlayState implements GameState {
 
         Thread t = new Thread(() -> {
             try {
-                long playRequestNano = songStartNano - (long) (AUDIO_OUTPUT_LATENCY * 1_000_000_000L);
-
                 while (true) {
+                    long playRequestNano = songStartNano - (long) (AUDIO_OUTPUT_LATENCY * 1_000_000_000L);
                     long now = System.nanoTime();
                     long remain = playRequestNano - now;
 
                     if (remain <= 0) {
                         break;
+                    }
+
+                    if (paused) {
+                        Thread.sleep(1);
+                        continue;
                     }
 
                     if (remain > 2_000_000L) {
@@ -275,6 +296,7 @@ public class GamePlayState implements GameState {
                 }
 
                 context.bgm.playLoaded(false);
+                audioStarted = true;
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -299,7 +321,6 @@ public class GamePlayState implements GameState {
         long pausedDuration = now - pauseStartNano;
 
         songStartNano += pausedDuration;
-
         paused = false;
 
         if (context.bgm.isPaused()) {
@@ -361,7 +382,6 @@ public class GamePlayState implements GameState {
     }
 
     private void drawGameHUD(Graphics2D g) {
-
         if (maxCombo < combo) {
             maxCombo = combo;
         }
@@ -417,7 +437,6 @@ public class GamePlayState implements GameState {
     }
 
     public void drawLane(Graphics2D g) {
-
         int startX = 30;
         int laneWidth = 80;
         java.awt.Composite original = g.getComposite();

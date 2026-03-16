@@ -16,14 +16,14 @@ public class StageManager {
 	}
 
 	private void loadStages() {
-		addGameStage("unwelcomeSchool");
-		addGameStage("afterSchoolDessert");
-		addGameStage("comingSoon");
+		addGameStage("unwelcomeSchool", 0.0);
+		addGameStage("afterSchoolDessert", -1.2);
+		addGameStage("comingSoon", 0.0);
 	}
 
-	private void addGameStage(String name) {
+	private void addGameStage(String name, double musicOffsetSeconds) {
 		stages.add(new Stage(name, "title_" + name, "/sample_" + name + ".wav", "/" + name + ".wav",
-				"stage_" + name + "_bg", "note_" + name + "_", null));
+				"stage_" + name + "_bg", "note_" + name + "_", null, musicOffsetSeconds));
 	}
 
 	private CorrectionConfig loadCorrectionConfig() {
