@@ -11,6 +11,7 @@ import core.GameState;
 public class IntroState implements GameState {
 
 	private final GameContext context;
+	private final AssetManager am = AssetManager.getInstance();
 	private Image background, title, pressEnter;
 
 	public IntroState(GameContext context) {
@@ -19,7 +20,6 @@ public class IntroState implements GameState {
 
 	@Override
 	public void enter() {
-		AssetManager am = AssetManager.getInstance();
 		background = am.getImage("intro_bg");
 		title = am.getImage("game_title");
 		pressEnter = am.getImage("press_enter");

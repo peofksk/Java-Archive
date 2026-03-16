@@ -14,6 +14,7 @@ import core.GameState;
 import stage.Difficulty;
 import stage.Stage;
 import state.LevelSelectState;
+import state.ResultState;
 
 public class GamePlayState implements GameState {
 
@@ -28,7 +29,7 @@ public class GamePlayState implements GameState {
     private boolean preloaded = false;
     private boolean started = false;
     private volatile boolean paused = false;
-    private boolean gameOver = false;
+    private boolean resultRequested = false;
 
     private volatile boolean musicThreadStarted = false;
     private volatile boolean audioStarted = false;
@@ -95,7 +96,6 @@ public class GamePlayState implements GameState {
         audioStarted = false;
         started = true;
         paused = false;
-        gameOver = false;
 
         pauseStartNano = 0L;
 
@@ -118,12 +118,11 @@ public class GamePlayState implements GameState {
 
     @Override
     public void update(double deltaTime) {
-        if (!started || paused || gameOver) {
+        if (!started || paused) {
             return;
         }
 
         updateTimelineTime();
-
         double gameplayTime = getGameplayTime();
 
         int missCountThisFrame = nm.update(gameplayTime);
@@ -131,8 +130,10 @@ public class GamePlayState implements GameState {
             applyJudgement(Judgement.MISS);
         }
 
-        if (audioStarted && !context.bgm.isPlaying() && timelineTime > 0 && nm.isFinished()) {
-            gameOver = true;
+        if (!resultRequested && audioStarted && !context.bgm.isPlaying() && timelineTime > 0 && nm.isFinished()) {
+            resultRequested = true;
+            context.changeState(new ResultState(context, score, maxCombo, accuracy));
+            return;
         }
     }
 
@@ -145,7 +146,7 @@ public class GamePlayState implements GameState {
         int baseY = 383;
         int laneWidth = 80;
         int startX = 30;
-        double speed = 800;
+        double speed = 600;
 
         double gameplayTime = getGameplayTime();
 
@@ -178,35 +179,10 @@ public class GamePlayState implements GameState {
 
             g.setComposite(original);
         }
-
-        if (gameOver) {
-            java.awt.Composite original = g.getComposite();
-
-            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.8f));
-            g.setColor(Color.BLACK);
-            g.fillRect(0, 0, 1024, 576);
-
-            g.setColor(Color.WHITE);
-            g.setFont(new Font("Arial", Font.BOLD, 40));
-            g.drawString("GAME OVER", 390, 250);
-
-            g.setFont(new Font("Arial", Font.PLAIN, 24));
-            g.drawString("Score : " + score, 420, 300);
-            g.drawString("Max Combo : " + maxCombo, 390, 335);
-            g.drawString("ESC to Exit", 415, 380);
-
-            g.setComposite(original);
-        }
     }
 
     @Override
     public void keyPressed(KeyEvent e) {
-        if (gameOver) {
-            if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
-                context.changeState(new LevelSelectState(context));
-            }
-            return;
-        }
 
         if (paused) {
             if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
