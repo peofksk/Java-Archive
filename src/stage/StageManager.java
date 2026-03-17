@@ -17,7 +17,7 @@ public class StageManager {
 
 	private void loadStages() {
 		addGameStage("unwelcomeSchool", 0.0);
-		addGameStage("afterSchoolDessert", -1.2);
+		addGameStage("afterSchoolDessert", -1.23);
 		addGameStage("comingSoon", 0.0);
 	}
 

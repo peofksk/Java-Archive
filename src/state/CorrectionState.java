@@ -313,7 +313,7 @@ public class CorrectionState implements GameState {
 			drawCenteredString(g2, String.format("Avg Error (signed): %+.2f ms", avgSigned), 512, 330);
 			drawCenteredString(g2, String.format("Global Offset: %+.4f s", context.getGlobalOffset()), 512, 380);
 			g2.setFont(new Font("SansSerif", Font.PLAIN, 18));
-			drawCenteredString(g2, "ENTER: Retry ESC: Back", 512, 440);
+			drawCenteredString(g2, "ENTER: Retry" + "    " + "ESC: Apply", 512, 440);
 		} finally {
 			g2.dispose();
 		}
