@@ -46,8 +46,6 @@ public class ResultState implements GameState {
         if (!preloaded) {
             preload();
         }
-        
-        context.bgm.playLoaded(true);
     }
 
     @Override
@@ -71,8 +69,8 @@ public class ResultState implements GameState {
         g.drawString("Accuracy : ", 150, 350);
         g.drawString(String.format("%.2f", result.getAccuracy()), 320, 350);
 
-        int rightLabelX = 450;
-        int rightValueX = 570;
+        int rightLabelX = 440;
+        int rightValueX = 590;
         int startY = 250;
         int gapY = 45;
 

@@ -38,7 +38,7 @@ public class GameResult {
     }
 
     public int getJudgementCount(Judgement judgement) {
-        if (judgement == Judgement.NONE) {
+        if (judgement == null || judgement == Judgement.NONE) {
             return 0;
         }
         return judgementCounts.getOrDefault(judgement, 0);
@@ -48,10 +48,10 @@ public class GameResult {
         return Collections.unmodifiableMap(judgementCounts);
     }
 
-    public int getTotalJudgedCount() {
+    public int getTotalJudgementCount() {
         int total = 0;
-        for (Map.Entry<Judgement, Integer> entry : judgementCounts.entrySet()) {
-            total += entry.getValue();
+        for (int count : judgementCounts.values()) {
+            total += count;
         }
         return total;
     }

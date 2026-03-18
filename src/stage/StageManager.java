@@ -16,18 +16,18 @@ public class StageManager {
 	}
 
 	private void loadStages() {
-		addGameStage("unwelcomeSchool", 0.0);
-		addGameStage("afterSchoolDessert", -1.23);
-		addGameStage("comingSoon", 0.0);
+		addGameStage("unwelcomeSchool", 180.0, 0.0);
+		addGameStage("afterSchoolDessert", 160.0, 1.23);
+		addGameStage("comingSoon", 120.0, 0.0);
 	}
 
-	private void addGameStage(String name, double musicOffsetSeconds) {
+	private void addGameStage(String name, double musicBPM, double musicOffsetSeconds) {
 		stages.add(new Stage(name, "title_" + name, "/sample_" + name + ".wav", "/" + name + ".wav",
-				"stage_" + name + "_bg", "note_" + name + "_", null, musicOffsetSeconds));
+				"stage_" + name + "_bg", "note_" + name + "_", musicBPM, musicOffsetSeconds));
 	}
 
 	private CorrectionConfig loadCorrectionConfig() {
-		return new CorrectionConfig("correction", "/correction.wav", "correction_bg", "note_correction", null);
+		return new CorrectionConfig("correction", "/correction.wav", "correction_bg", "note_correction", 112.0, 0.0);
 	}
 
 	public Stage getCurrentStage() {
@@ -66,6 +66,6 @@ public class StageManager {
 		Stage stage = getCurrentStage();
 
 		return new CorrectionConfig(stage.getLevelName(), stage.getMusicPath(), stage.getBackgroundImageKey(),
-				stage.getNoteFilePath(), stage.getNoteColor());
+				stage.getNoteFilePath(), stage.getMusicBPM(), stage.getMusicOffsetSeconds());
 	}
 }

@@ -8,10 +8,11 @@ import java.util.Map;
 
 import asset.AssetManager;
 import core.GameContext;
+import stage.Stage;
 
 public class NoteManager {
 
-	private final GameContext context;
+    private final GameContext context;
     private final Map<Lane, List<Note>> laneNotes = new EnumMap<>(Lane.class);
 
     private static final double PERFECT_WINDOW = 0.08;
@@ -22,14 +23,20 @@ public class NoteManager {
 
     private final AssetManager am = AssetManager.getInstance();
 
-    private double bpm = 120.0;
-    private double offset = 0.0;
+    private double bpm;
+    private double offset;
 
     private double lastHitTimeDiffSeconds = 0.0;
 
-    public NoteManager(GameContext context) {
-    	this.context = context;
-   
+    public NoteManager(GameContext context, Stage stage) {
+        this(context, stage.getMusicBPM(), stage.getMusicOffsetSeconds());
+    }
+
+    public NoteManager(GameContext context, double bpm, double offset) {
+        this.context = context;
+        this.bpm = bpm;
+        this.offset = offset;
+
         for (Lane lane : Lane.values()) {
             laneNotes.put(lane, new ArrayList<>());
         }
@@ -40,7 +47,6 @@ public class NoteManager {
     }
 
     public void loadChart(String key) {
-
         ArrayList<String> lines = am.getText(key);
 
         if (lines == null) {
@@ -52,14 +58,11 @@ public class NoteManager {
             laneNotes.get(lane).clear();
         }
 
-        bpm = 120.0;
-        offset = 0.0;
         lastHitTimeDiffSeconds = 0.0;
 
         double secondsPerBeat = 60.0 / bpm;
 
         for (String line : lines) {
-
             line = line.trim();
 
             if (line.isEmpty() || line.startsWith("#")) {
@@ -69,12 +72,6 @@ public class NoteManager {
             String[] parts = line.split("\\s+");
 
             if (parts.length < 2) {
-                continue;
-            }
-
-            if (parts[0].equalsIgnoreCase("BPM")) {
-                bpm = Double.parseDouble(parts[1]);
-                secondsPerBeat = 60.0 / bpm;
                 continue;
             }
 
@@ -100,15 +97,12 @@ public class NoteManager {
     }
 
     public int update(double currentTime) {
-
         int missCount = 0;
 
         for (Lane lane : Lane.values()) {
-
             List<Note> notes = laneNotes.get(lane);
 
             while (!notes.isEmpty()) {
-
                 Note note = notes.get(0);
 
                 if (!note.isJudged() && currentTime - note.getHitTime() > MISS_WINDOW) {
@@ -125,7 +119,6 @@ public class NoteManager {
     }
 
     public Judgement judge(Lane lane, double currentTime) {
-
         List<Note> notes = laneNotes.get(lane);
 
         if (notes.isEmpty()) {
