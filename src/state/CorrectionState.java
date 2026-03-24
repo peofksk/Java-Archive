@@ -168,7 +168,7 @@ public class CorrectionState implements GameState {
 
         background = am.getImage(correctionConfig.getBackgroundImageKey());
         judgementLine = am.getImage("judgement_line");
-        noteImage = am.getImage("note_image");
+        noteImage = am.getImage("note_" + context.getNoteIndex());
 
         nm = new NoteManager(
                 context,

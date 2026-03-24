@@ -46,6 +46,7 @@ public class ResultState implements GameState {
         if (!preloaded) {
             preload();
         }
+        context.bgm.playLoaded(true);
     }
 
     @Override

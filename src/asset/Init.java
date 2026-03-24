@@ -42,7 +42,7 @@ public class Init {
         am.loadText("note_unwelcomeSchool_easy", "/unwelcomeSchool_Easy.txt");
         am.loadText("note_unwelcomeSchool_hard", "/unwelcomeSchool_Hard.txt");
         am.loadText("note_unwelcomeSchool_extreme", "/unwelcomeSchool_Extreme.txt");
-        // am.loadText("note_afterSchoolDessert_easy", "/afterSchoolDessert_Easy.txt");
+        am.loadText("note_afterSchoolDessert_easy", "/afterSchoolDessert_Easy.txt");
         am.loadText("note_afterSchoolDessert_hard", "/afterSchoolDessert_Hard.txt");
         // am.loadText("note_afterSchoolDessert_extreme", "/afterSchoolDessert_Extreme.txt");
     }
