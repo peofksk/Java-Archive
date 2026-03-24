@@ -1,6 +1,8 @@
 package editor;
 
-import javax.sound.sampled.*;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.Clip;
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
@@ -19,14 +21,16 @@ public class ChartEditor extends JFrame {
 
     private final Timer playbackTimer;
 
-    private JTextField startField;
+    private JTextField bpmField;
+    private JTextField offsetField;
+    private JTextField startBeatField;
     private JLabel musicLabel;
 
-    private double playbackStartSeconds = 0.0;
+    private double playbackStartBeat = 0.0;
 
     public ChartEditor() {
         setTitle("Rhythm Chart Editor");
-        setSize(760, 800);
+        setSize(900, 820);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
@@ -62,8 +66,14 @@ public class ChartEditor extends JFrame {
         JButton stopButton = new JButton("Stop");
         JButton exitButton = new JButton("Exit");
 
-        JLabel startLabel = new JLabel("Start(s):");
-        startField = new JTextField("0.0", 6);
+        JLabel bpmLabel = new JLabel("BPM:");
+        bpmField = new JTextField("160", 5);
+
+        JLabel offsetLabel = new JLabel("Offset(s):");
+        offsetField = new JTextField("0.0", 6);
+
+        JLabel startBeatLabel = new JLabel("Start Beat:");
+        startBeatField = new JTextField("0.0", 6);
 
         JButton useScrollButton = new JButton("Use Scroll");
 
@@ -72,24 +82,28 @@ public class ChartEditor extends JFrame {
         JComboBox<String> gridCombo = new JComboBox<>(gridOptions);
         gridCombo.setSelectedItem("0.25");
 
-        JLabel speedLabel = new JLabel("Pixels/Sec:");
-        JTextField speedField = new JTextField("120", 5);
+        JLabel speedLabel = new JLabel("Pixels/Beat:");
+        JTextField speedField = new JTextField("64", 5);
 
         panel.add(loadChartButton);
         panel.add(saveChartButton);
         panel.add(clearButton);
-        panel.add(Box.createHorizontalStrut(16));
+        panel.add(Box.createHorizontalStrut(14));
 
         panel.add(loadMusicButton);
         panel.add(playButton);
         panel.add(stopButton);
         panel.add(exitButton);
-        panel.add(Box.createHorizontalStrut(12));
+        panel.add(Box.createHorizontalStrut(14));
 
-        panel.add(startLabel);
-        panel.add(startField);
+        panel.add(bpmLabel);
+        panel.add(bpmField);
+        panel.add(offsetLabel);
+        panel.add(offsetField);
+        panel.add(startBeatLabel);
+        panel.add(startBeatField);
         panel.add(useScrollButton);
-        panel.add(Box.createHorizontalStrut(12));
+        panel.add(Box.createHorizontalStrut(14));
 
         panel.add(gridLabel);
         panel.add(gridCombo);
@@ -131,9 +145,9 @@ public class ChartEditor extends JFrame {
             dispose();
         });
 
-        useScrollButton.addActionListener(e -> {
-            startField.setText(String.format("%.3f", lanePanel.getScrollOffsetSeconds()));
-        });
+        useScrollButton.addActionListener(e ->
+                startBeatField.setText(String.format("%.3f", lanePanel.getScrollOffsetBeats()))
+        );
 
         gridCombo.addActionListener(e -> {
             try {
@@ -147,7 +161,7 @@ public class ChartEditor extends JFrame {
             try {
                 double speed = Double.parseDouble(speedField.getText().trim());
                 if (speed > 0) {
-                    lanePanel.setPixelsPerSecond(speed);
+                    lanePanel.setPixelsPerBeat(speed);
                 }
             } catch (Exception ignored) {
             }
@@ -178,11 +192,11 @@ public class ChartEditor extends JFrame {
             audioClip = clip;
             audioFile = file;
 
-            lanePanel.setPlaybackTimeSeconds(0.0);
+            lanePanel.setPlaybackBeat(0.0);
             lanePanel.setPlaybackLineVisible(true);
 
-            musicLabel.setText("Music: " + file.getName() + "  |  Length: " +
-                    String.format("%.3f s", getClipLengthSeconds()));
+            musicLabel.setText("Music: " + file.getName()
+                    + " | Length: " + String.format("%.3f s", getClipLengthSeconds()));
 
         } catch (Exception e) {
             audioClip = null;
@@ -204,24 +218,28 @@ public class ChartEditor extends JFrame {
             return;
         }
 
-        double startSeconds = parseStartSeconds();
+        double bpm = parseBpm();
+        double offsetSeconds = parseOffsetSeconds();
+        double startBeat = parseStartBeat();
+
+        playbackStartBeat = startBeat;
+
+        double startSeconds = beatToSeconds(startBeat, bpm, offsetSeconds);
         double clipLength = getClipLengthSeconds();
 
-        if (startSeconds < 0) {
-            startSeconds = 0;
+        if (startSeconds < 0.0) {
+            startSeconds = 0.0;
         }
         if (startSeconds > clipLength) {
             startSeconds = clipLength;
         }
 
-        playbackStartSeconds = startSeconds;
-
         stopAudio();
 
         audioClip.setMicrosecondPosition((long) (startSeconds * 1_000_000L));
 
-        lanePanel.setScrollOffsetSeconds(startSeconds);
-        lanePanel.setPlaybackTimeSeconds(startSeconds);
+        lanePanel.setScrollOffsetBeats(startBeat);
+        lanePanel.setPlaybackBeat(startBeat);
         lanePanel.setPlaybackLineVisible(true);
 
         audioClip.start();
@@ -241,10 +259,21 @@ public class ChartEditor extends JFrame {
         stopAudio();
 
         if (audioClip != null) {
-            audioClip.setMicrosecondPosition((long) (playbackStartSeconds * 1_000_000L));
+            double bpm = parseBpm();
+            double offsetSeconds = parseOffsetSeconds();
+            double startSeconds = beatToSeconds(playbackStartBeat, bpm, offsetSeconds);
+
+            if (startSeconds < 0.0) {
+                startSeconds = 0.0;
+            }
+            if (startSeconds > getClipLengthSeconds()) {
+                startSeconds = getClipLengthSeconds();
+            }
+
+            audioClip.setMicrosecondPosition((long) (startSeconds * 1_000_000L));
         }
 
-        lanePanel.setPlaybackTimeSeconds(playbackStartSeconds);
+        lanePanel.setPlaybackBeat(playbackStartBeat);
         lanePanel.setPlaybackLineVisible(audioClip != null);
         lanePanel.repaint();
     }
@@ -263,8 +292,13 @@ public class ChartEditor extends JFrame {
             return;
         }
 
+        double bpm = parseBpm();
+        double offsetSeconds = parseOffsetSeconds();
+
         double currentSeconds = audioClip.getMicrosecondPosition() / 1_000_000.0;
-        lanePanel.setPlaybackTimeSeconds(currentSeconds);
+        double currentBeat = secondsToBeat(currentSeconds, bpm, offsetSeconds);
+
+        lanePanel.setPlaybackBeat(currentBeat);
 
         if (!audioClip.isRunning()) {
             double clipLength = getClipLengthSeconds();
@@ -274,6 +308,14 @@ public class ChartEditor extends JFrame {
         }
     }
 
+    private double beatToSeconds(double beat, double bpm, double offsetSeconds) {
+        return beat * (60.0 / bpm) + offsetSeconds;
+    }
+
+    private double secondsToBeat(double seconds, double bpm, double offsetSeconds) {
+        return (seconds - offsetSeconds) / (60.0 / bpm);
+    }
+
     private double getClipLengthSeconds() {
         if (audioClip == null) {
             return 0.0;
@@ -281,9 +323,26 @@ public class ChartEditor extends JFrame {
         return audioClip.getMicrosecondLength() / 1_000_000.0;
     }
 
-    private double parseStartSeconds() {
+    private double parseBpm() {
         try {
-            return Double.parseDouble(startField.getText().trim());
+            double bpm = Double.parseDouble(bpmField.getText().trim());
+            return bpm > 0 ? bpm : 120.0;
+        } catch (Exception e) {
+            return 120.0;
+        }
+    }
+
+    private double parseOffsetSeconds() {
+        try {
+            return Double.parseDouble(offsetField.getText().trim());
+        } catch (Exception e) {
+            return 0.0;
+        }
+    }
+
+    private double parseStartBeat() {
+        try {
+            return Double.parseDouble(startBeatField.getText().trim());
         } catch (Exception e) {
             return 0.0;
         }
@@ -296,7 +355,7 @@ public class ChartEditor extends JFrame {
 
 class LanePanel extends JPanel {
 
-    private final ArrayList<Note> notes = new ArrayList<>();
+    private final ArrayList<NoteData> notes = new ArrayList<>();
 
     private final int lanes = 4;
     private final int laneWidth = 100;
@@ -304,13 +363,13 @@ class LanePanel extends JPanel {
     private final int noteHeight = 12;
     private final int baseX = 100;
 
-    private double pixelsPerSecond = 120.0;
+    private double pixelsPerBeat = 64.0;
     private double gridInterval = 0.25;
 
-    private double scrollOffsetSeconds = 0.0;
-    private final double wheelScrollSeconds = 0.5;
+    private double scrollOffsetBeats = 0.0;
+    private final double wheelScrollBeats = 1.0;
 
-    private double playbackTimeSeconds = 0.0;
+    private double playbackBeat = 0.0;
     private boolean playbackLineVisible = false;
 
     public LanePanel() {
@@ -327,10 +386,10 @@ class LanePanel extends JPanel {
         });
 
         addMouseWheelListener(e -> {
-            scrollOffsetSeconds += e.getPreciseWheelRotation() * wheelScrollSeconds;
+            scrollOffsetBeats += e.getPreciseWheelRotation() * wheelScrollBeats;
 
-            if (scrollOffsetSeconds < 0) {
-                scrollOffsetSeconds = 0;
+            if (scrollOffsetBeats < 0) {
+                scrollOffsetBeats = 0;
             }
 
             repaint();
@@ -346,30 +405,30 @@ class LanePanel extends JPanel {
 
         int lane = relativeX / laneWidth;
 
-        double rawTime = screenYToTime(e.getY());
-        double snappedTime = Math.round(rawTime / gridInterval) * gridInterval;
+        double rawBeat = screenYToBeat(e.getY());
+        double snappedBeat = Math.round(rawBeat / gridInterval) * gridInterval;
 
-        if (snappedTime < 0) {
-            snappedTime = 0;
+        if (snappedBeat < 0) {
+            snappedBeat = 0;
         }
 
-        Note existing = findNote(lane, snappedTime);
+        NoteData existing = findNote(lane, snappedBeat);
 
         if (existing != null) {
             notes.remove(existing);
         } else {
-            notes.add(new Note(lane, snappedTime));
+            notes.add(new NoteData(lane, snappedBeat));
             sortNotes();
         }
 
         repaint();
     }
 
-    private Note findNote(int lane, double time) {
+    private NoteData findNote(int lane, double beat) {
         final double epsilon = 0.0001;
 
-        for (Note note : notes) {
-            if (note.lane == lane && Math.abs(note.time - time) < epsilon) {
+        for (NoteData note : notes) {
+            if (note.lane == lane && Math.abs(note.beat - beat) < epsilon) {
                 return note;
             }
         }
@@ -378,15 +437,15 @@ class LanePanel extends JPanel {
     }
 
     private void sortNotes() {
-        notes.sort(Comparator.comparingDouble((Note n) -> n.time).thenComparingInt(n -> n.lane));
+        notes.sort(Comparator.comparingDouble((NoteData n) -> n.beat).thenComparingInt(n -> n.lane));
     }
 
-    private double screenYToTime(int y) {
-        return scrollOffsetSeconds + (y / pixelsPerSecond);
+    private double screenYToBeat(int y) {
+        return scrollOffsetBeats + (y / pixelsPerBeat);
     }
 
-    private int timeToScreenY(double time) {
-        return (int) Math.round((time - scrollOffsetSeconds) * pixelsPerSecond);
+    private int beatToScreenY(double beat) {
+        return (int) Math.round((beat - scrollOffsetBeats) * pixelsPerBeat);
     }
 
     public void setGridInterval(double gridInterval) {
@@ -394,13 +453,13 @@ class LanePanel extends JPanel {
         repaint();
     }
 
-    public void setPixelsPerSecond(double pixelsPerSecond) {
-        this.pixelsPerSecond = pixelsPerSecond;
+    public void setPixelsPerBeat(double pixelsPerBeat) {
+        this.pixelsPerBeat = pixelsPerBeat;
         repaint();
     }
 
-    public void setPlaybackTimeSeconds(double playbackTimeSeconds) {
-        this.playbackTimeSeconds = playbackTimeSeconds;
+    public void setPlaybackBeat(double playbackBeat) {
+        this.playbackBeat = playbackBeat;
         repaint();
     }
 
@@ -409,13 +468,13 @@ class LanePanel extends JPanel {
         repaint();
     }
 
-    public void setScrollOffsetSeconds(double scrollOffsetSeconds) {
-        this.scrollOffsetSeconds = Math.max(0.0, scrollOffsetSeconds);
+    public void setScrollOffsetBeats(double scrollOffsetBeats) {
+        this.scrollOffsetBeats = Math.max(0.0, scrollOffsetBeats);
         repaint();
     }
 
-    public double getScrollOffsetSeconds() {
-        return scrollOffsetSeconds;
+    public double getScrollOffsetBeats() {
+        return scrollOffsetBeats;
     }
 
     public void clearNotes() {
@@ -457,17 +516,17 @@ class LanePanel extends JPanel {
         int x1 = baseX;
         int x2 = baseX + lanes * laneWidth;
 
-        double startTime = scrollOffsetSeconds;
-        double endTime = scrollOffsetSeconds + (panelHeight / pixelsPerSecond);
+        double startBeat = scrollOffsetBeats;
+        double endBeat = scrollOffsetBeats + (panelHeight / pixelsPerBeat);
 
-        double firstGrid = Math.floor(startTime / gridInterval) * gridInterval;
+        double firstGrid = Math.floor(startBeat / gridInterval) * gridInterval;
 
         g.setFont(new Font("Arial", Font.PLAIN, 12));
 
-        for (double t = firstGrid; t <= endTime + gridInterval; t += gridInterval) {
-            int y = timeToScreenY(t);
+        for (double beat = firstGrid; beat <= endBeat + gridInterval; beat += gridInterval) {
+            int y = beatToScreenY(beat);
 
-            boolean major = Math.abs(t - Math.round(t)) < 0.0001;
+            boolean major = Math.abs(beat - Math.round(beat)) < 0.0001;
 
             if (major) {
                 g.setColor(new Color(120, 120, 120));
@@ -479,7 +538,7 @@ class LanePanel extends JPanel {
 
             if (major) {
                 g.setColor(Color.WHITE);
-                String label = String.format("%.0f", t);
+                String label = String.format("%.0f", beat);
                 FontMetrics fm = g.getFontMetrics();
                 int textX = baseX - 10 - fm.stringWidth(label);
                 int textY = y + (fm.getAscent() / 2) - 2;
@@ -502,7 +561,7 @@ class LanePanel extends JPanel {
             return;
         }
 
-        int y = timeToScreenY(playbackTimeSeconds);
+        int y = beatToScreenY(playbackBeat);
 
         if (y < -4 || y > getHeight() + 4) {
             return;
@@ -518,7 +577,7 @@ class LanePanel extends JPanel {
             g2.drawLine(x1, y, x2, y);
 
             g2.setFont(new Font("Arial", Font.BOLD, 12));
-            String label = String.format("PLAY %.3f s", playbackTimeSeconds);
+            String label = String.format("PLAY %.3f beat", playbackBeat);
             FontMetrics fm = g2.getFontMetrics();
             int boxW = fm.stringWidth(label) + 10;
             int boxH = 18;
@@ -536,8 +595,8 @@ class LanePanel extends JPanel {
     private void drawNotes(Graphics2D g) {
         g.setColor(Color.CYAN);
 
-        for (Note note : notes) {
-            int y = timeToScreenY(note.time) - noteHeight / 2;
+        for (NoteData note : notes) {
+            int y = beatToScreenY(note.beat) - noteHeight / 2;
 
             if (y + noteHeight < 0 || y > getHeight()) {
                 continue;
@@ -552,16 +611,16 @@ class LanePanel extends JPanel {
         g.setColor(Color.WHITE);
         g.setFont(new Font("Arial", Font.PLAIN, 14));
 
-        g.drawString(String.format("Scroll: %.3f s", scrollOffsetSeconds), 10, 20);
-        g.drawString(String.format("Grid: %.3f", gridInterval), 10, 40);
-        g.drawString(String.format("Cursor: %.3f s", playbackTimeSeconds), 10, 60);
+        g.drawString(String.format("Scroll: %.3f beat", scrollOffsetBeats), 10, 20);
+        g.drawString(String.format("Grid: %.3f beat", gridInterval), 10, 40);
+        g.drawString(String.format("Cursor: %.3f beat", playbackBeat), 10, 60);
     }
 
     public void saveChart(File file) {
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
             sortNotes();
 
-            for (Note note : notes) {
+            for (NoteData note : notes) {
                 String laneText = switch (note.lane) {
                     case 0 -> "D";
                     case 1 -> "F";
@@ -570,11 +629,14 @@ class LanePanel extends JPanel {
                     default -> throw new IllegalStateException("Unexpected lane: " + note.lane);
                 };
 
-                bw.write(String.format("%.3f %s%n", note.time, laneText));
+                bw.write(String.format("%.3f %s%n", note.beat, laneText));
             }
 
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "저장 실패: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this,
+                    "저장 실패: " + e.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -595,9 +657,9 @@ class LanePanel extends JPanel {
                     continue;
                 }
 
-                double time;
+                double beat;
                 try {
-                    time = Double.parseDouble(parts[0]);
+                    beat = Double.parseDouble(parts[0]);
                 } catch (NumberFormatException e) {
                     continue;
                 }
@@ -614,24 +676,27 @@ class LanePanel extends JPanel {
                     continue;
                 }
 
-                notes.add(new Note(lane, time));
+                notes.add(new NoteData(lane, beat));
             }
 
             sortNotes();
             repaint();
 
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "불러오기 실패: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this,
+                    "불러오기 실패: " + e.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
         }
     }
 }
 
-class Note {
+class NoteData {
     int lane;
-    double time;
+    double beat;
 
-    public Note(int lane, double time) {
+    public NoteData(int lane, double beat) {
         this.lane = lane;
-        this.time = time;
+        this.beat = beat;
     }
 }
