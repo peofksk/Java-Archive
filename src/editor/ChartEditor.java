@@ -6,35 +6,55 @@ import javax.sound.sampled.Clip;
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
+import stage.Difficulty;
+import stage.Stage;
+import stage.StageManager;
+
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public class ChartEditor extends JFrame {
 
     private final LanePanel lanePanel;
-
-    private Clip audioClip;
-    private File audioFile;
-
     private final Timer playbackTimer;
+
+    private final Map<String, StagePreset> presetMap = new LinkedHashMap<>();
+    private final Map<String, byte[]> preloadedMusicBytes = new LinkedHashMap<>();
+    private final Map<String, ArrayList<String>> preloadedCharts = new LinkedHashMap<>();
+
+    private JComboBox<StagePreset> stageCombo;
+    private JComboBox<Difficulty> difficultyCombo;
 
     private JTextField bpmField;
     private JTextField offsetField;
     private JTextField startBeatField;
     private JLabel musicLabel;
 
+    private Clip audioClip;
     private double playbackStartBeat = 0.0;
+    private boolean updatingPresetSelectors = false;
 
     public ChartEditor() {
         setTitle("Rhythm Chart Editor");
-        setSize(900, 820);
+        setSize(1040, 820);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
         lanePanel = new LanePanel();
+
+        preloadStageAssets();
 
         add(createTopPanel(), BorderLayout.NORTH);
         add(lanePanel, BorderLayout.CENTER);
@@ -49,6 +69,7 @@ public class ChartEditor extends JFrame {
             }
         });
 
+        initializePresetSelection();
         setLocationRelativeTo(null);
     }
 
@@ -57,11 +78,15 @@ public class ChartEditor extends JFrame {
 
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 
-        JButton loadChartButton = new JButton("Load Chart");
-        JButton saveChartButton = new JButton("Save Chart");
+        JButton loadChartButton = new JButton("Load Chart File");
+        JButton saveChartButton = new JButton("Save Chart As");
+        JButton overwritePresetButton = new JButton("Overwrite Preset");
         JButton clearButton = new JButton("Clear");
 
-        JButton loadMusicButton = new JButton("Load Music");
+        stageCombo = new JComboBox<>();
+        difficultyCombo = new JComboBox<>();
+        JButton reloadPresetButton = new JButton("Reload Preset");
+
         JButton playButton = new JButton("Play");
         JButton stopButton = new JButton("Stop");
         JButton exitButton = new JButton("Exit");
@@ -87,14 +112,21 @@ public class ChartEditor extends JFrame {
 
         panel.add(loadChartButton);
         panel.add(saveChartButton);
+        panel.add(overwritePresetButton);
         panel.add(clearButton);
-        panel.add(Box.createHorizontalStrut(14));
+        panel.add(Box.createHorizontalStrut(12));
 
-        panel.add(loadMusicButton);
+        panel.add(new JLabel("Stage:"));
+        panel.add(stageCombo);
+        panel.add(new JLabel("Difficulty:"));
+        panel.add(difficultyCombo);
+        panel.add(reloadPresetButton);
+        panel.add(Box.createHorizontalStrut(12));
+
         panel.add(playButton);
         panel.add(stopButton);
         panel.add(exitButton);
-        panel.add(Box.createHorizontalStrut(14));
+        panel.add(Box.createHorizontalStrut(12));
 
         panel.add(bpmLabel);
         panel.add(bpmField);
@@ -103,7 +135,7 @@ public class ChartEditor extends JFrame {
         panel.add(startBeatLabel);
         panel.add(startBeatField);
         panel.add(useScrollButton);
-        panel.add(Box.createHorizontalStrut(14));
+        panel.add(Box.createHorizontalStrut(12));
 
         panel.add(gridLabel);
         panel.add(gridCombo);
@@ -112,31 +144,46 @@ public class ChartEditor extends JFrame {
         panel.add(speedLabel);
         panel.add(speedField);
 
-        musicLabel = new JLabel("No music loaded");
+        musicLabel = new JLabel("No preset loaded");
         musicLabel.setBorder(BorderFactory.createEmptyBorder(0, 10, 6, 10));
 
         wrapper.add(panel, BorderLayout.NORTH);
         wrapper.add(musicLabel, BorderLayout.SOUTH);
 
-        loadChartButton.addActionListener(e -> {
-            JFileChooser chooser = new JFileChooser();
-            chooser.setDialogTitle("Load Chart");
-            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                lanePanel.loadChart(chooser.getSelectedFile());
-            }
-        });
+        loadChartButton.addActionListener(e -> importChartFromFile());
 
         saveChartButton.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
-            chooser.setDialogTitle("Save Chart");
+            chooser.setDialogTitle("Save Chart As");
             if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
                 lanePanel.saveChart(chooser.getSelectedFile());
+                updatePresetStatusLabel();
             }
         });
 
-        clearButton.addActionListener(e -> lanePanel.clearNotes());
+        overwritePresetButton.addActionListener(e -> overwriteSelectedPresetChart());
 
-        loadMusicButton.addActionListener(e -> chooseAndLoadMusic());
+        clearButton.addActionListener(e -> {
+            lanePanel.clearNotes();
+            updatePresetStatusLabel();
+        });
+
+        stageCombo.addActionListener(e -> {
+            if (updatingPresetSelectors) {
+                return;
+            }
+            refreshDifficultyCombo(getSelectedPreset(), null);
+            loadSelectedPreset();
+        });
+
+        difficultyCombo.addActionListener(e -> {
+            if (updatingPresetSelectors) {
+                return;
+            }
+            loadSelectedPreset();
+        });
+
+        reloadPresetButton.addActionListener(e -> loadSelectedPreset());
         playButton.addActionListener(e -> playAudio());
         stopButton.addActionListener(e -> stopAudioAndResetLine());
         exitButton.addActionListener(e -> {
@@ -167,52 +214,272 @@ public class ChartEditor extends JFrame {
             }
         });
 
+        registerKeyboardShortcuts(overwritePresetButton);
         return wrapper;
     }
 
-    private void chooseAndLoadMusic() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Load Music");
-        chooser.setFileFilter(new FileNameExtensionFilter("WAV Audio (*.wav)", "wav"));
+    private void registerKeyboardShortcuts(JButton overwritePresetButton) {
+        JRootPane rootPane = getRootPane();
+        if (rootPane == null) {
+            return;
+        }
 
-        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            loadMusic(chooser.getSelectedFile());
+        KeyStroke ctrlS = KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK);
+        rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(ctrlS, "overwritePreset");
+        rootPane.getActionMap().put("overwritePreset", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                overwritePresetButton.doClick();
+            }
+        });
+    }
+
+    private void preloadStageAssets() {
+        presetMap.clear();
+        preloadedMusicBytes.clear();
+        preloadedCharts.clear();
+
+        for (Stage stage : loadStagesFromManager()) {
+            StagePreset preset = new StagePreset(stage);
+
+            byte[] musicBytes = readBinaryResource(stage.getMusicPath());
+            if (musicBytes != null) {
+                preloadedMusicBytes.put(stage.getLevelName(), musicBytes);
+            }
+
+            for (Difficulty difficulty : Difficulty.values()) {
+                String chartResourcePath = buildChartResourcePath(stage, difficulty);
+                ArrayList<String> chartLines = readTextResource(chartResourcePath);
+
+                if (chartLines != null) {
+                    String chartCacheKey = buildChartCacheKey(stage, difficulty);
+                    preloadedCharts.put(chartCacheKey, chartLines);
+                    preset.addAvailableDifficulty(difficulty);
+                }
+            }
+
+            if (preset.hasAnyDifficulty()) {
+                presetMap.put(stage.getLevelName(), preset);
+            }
         }
     }
 
-    private void loadMusic(File file) {
+    private List<Stage> loadStagesFromManager() {
+        ArrayList<Stage> stages = new ArrayList<>();
+        StageManager manager = new StageManager();
+
+        int count = manager.getStageSize();
+        for (int i = 0; i < count; i++) {
+            stages.add(manager.getCurrentStage());
+            if (manager.hasNext()) {
+                manager.next();
+            }
+        }
+
+        return stages;
+    }
+
+    private void initializePresetSelection() {
+        updatingPresetSelectors = true;
+        stageCombo.removeAllItems();
+
+        for (StagePreset preset : presetMap.values()) {
+            stageCombo.addItem(preset);
+        }
+
+        updatingPresetSelectors = false;
+
+        if (stageCombo.getItemCount() == 0) {
+            musicLabel.setText("프리로드 가능한 레벨 채보가 없습니다.");
+            difficultyCombo.setEnabled(false);
+            return;
+        }
+
+        stageCombo.setSelectedIndex(0);
+        refreshDifficultyCombo(getSelectedPreset(), Difficulty.Easy);
+        loadSelectedPreset();
+    }
+
+    private void refreshDifficultyCombo(StagePreset preset, Difficulty preferredDifficulty) {
+        updatingPresetSelectors = true;
+        difficultyCombo.removeAllItems();
+
+        if (preset != null) {
+            for (Difficulty difficulty : Difficulty.values()) {
+                if (preset.hasDifficulty(difficulty)) {
+                    difficultyCombo.addItem(difficulty);
+                }
+            }
+        }
+
+        if (difficultyCombo.getItemCount() > 0) {
+            Difficulty toSelect = preferredDifficulty;
+            if (toSelect == null || !preset.hasDifficulty(toSelect)) {
+                toSelect = (Difficulty) difficultyCombo.getItemAt(0);
+            }
+            difficultyCombo.setSelectedItem(toSelect);
+            difficultyCombo.setEnabled(true);
+        } else {
+            difficultyCombo.setEnabled(false);
+        }
+
+        updatingPresetSelectors = false;
+    }
+
+    private void loadSelectedPreset() {
+        StagePreset preset = getSelectedPreset();
+        Difficulty difficulty = getSelectedDifficulty();
+
+        if (preset == null || difficulty == null) {
+            return;
+        }
+
         stopAudio();
         closeAudio();
 
-        try {
-            AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(file);
-            Clip clip = AudioSystem.getClip();
-            clip.open(audioInputStream);
+        bpmField.setText(formatDouble(preset.stage.getMusicBPM()));
+        offsetField.setText(formatDouble(preset.stage.getMusicOffsetSeconds()));
 
-            audioClip = clip;
-            audioFile = file;
+        ArrayList<String> chartLines = preloadedCharts.get(buildChartCacheKey(preset.stage, difficulty));
+        if (chartLines != null) {
+            lanePanel.loadChartLines(chartLines);
+        } else {
+            lanePanel.clearNotes();
+        }
 
-            lanePanel.setPlaybackBeat(0.0);
-            lanePanel.setPlaybackLineVisible(true);
-
-            musicLabel.setText("Music: " + file.getName()
-                    + " | Length: " + String.format("%.3f s", getClipLengthSeconds()));
-
-        } catch (Exception e) {
+        byte[] musicBytes = preloadedMusicBytes.get(preset.stage.getLevelName());
+        if (musicBytes != null) {
+            try {
+                audioClip = createClipFromBytes(musicBytes);
+                lanePanel.setPlaybackBeat(0.0);
+                lanePanel.setPlaybackLineVisible(true);
+            } catch (Exception e) {
+                audioClip = null;
+                lanePanel.setPlaybackLineVisible(false);
+                JOptionPane.showMessageDialog(this,
+                        "프리로드된 음악 열기 실패: " + e.getMessage(),
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE);
+            }
+        } else {
             audioClip = null;
-            audioFile = null;
-            musicLabel.setText("No music loaded");
+            lanePanel.setPlaybackLineVisible(false);
+        }
+
+        playbackStartBeat = 0.0;
+        startBeatField.setText("0.0");
+        updatePresetStatusLabel();
+        lanePanel.requestFocusInWindow();
+    }
+
+    private void importChartFromFile() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Load Chart");
+        chooser.setFileFilter(new FileNameExtensionFilter("Text Chart (*.txt)", "txt"));
+
+        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            lanePanel.loadChart(chooser.getSelectedFile());
+            updatePresetStatusLabel();
+        }
+    }
+
+    private void overwriteSelectedPresetChart() {
+        StagePreset preset = getSelectedPreset();
+        Difficulty difficulty = getSelectedDifficulty();
+
+        if (preset == null || difficulty == null) {
             JOptionPane.showMessageDialog(this,
-                    "음악 파일 로드 실패: " + e.getMessage(),
+                    "선택된 프리셋이 없습니다.",
+                    "Info",
+                    JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        String fileName = buildChartFileName(preset.stage, difficulty);
+        Path targetPath = resolveWritableChartPath(preset.stage, difficulty);
+
+        if (targetPath == null) {
+            JOptionPane.showMessageDialog(this,
+                    "원본 채보 파일 경로를 찾지 못했습니다.\n"
+                            + "아래 이름으로 asset 폴더에 파일을 두고 다시 시도하세요:\n"
+                            + fileName,
                     "Error",
                     JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        ArrayList<String> lines = lanePanel.exportChartLines();
+
+        try {
+            Path parent = targetPath.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+
+            Files.write(targetPath, lines, StandardCharsets.UTF_8);
+            preloadedCharts.put(buildChartCacheKey(preset.stage, difficulty), new ArrayList<>(lines));
+            updatePresetStatusLabel();
+
+            JOptionPane.showMessageDialog(this,
+                    "프리셋 원본 채보에 바로 저장했습니다.\n" + targetPath.toAbsolutePath(),
+                    "Saved",
+                    JOptionPane.INFORMATION_MESSAGE);
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this,
+                    "프리셋 덮어쓰기 실패: " + e.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private Path resolveWritableChartPath(Stage stage, Difficulty difficulty) {
+        String resourcePath = buildChartResourcePath(stage, difficulty);
+        String fileName = buildChartFileName(stage, difficulty);
+
+        ArrayList<Path> candidates = new ArrayList<>();
+        candidates.add(Paths.get("asset", fileName));
+        candidates.add(Paths.get("Asset", fileName));
+        candidates.add(Paths.get("src", "asset", fileName));
+        candidates.add(Paths.get("src", "main", "resources", fileName));
+        candidates.add(Paths.get("resources", fileName));
+
+        for (Path candidate : candidates) {
+            Path normalized = candidate.toAbsolutePath().normalize();
+            Path parent = normalized.getParent();
+
+            if (Files.exists(normalized)) {
+                return normalized;
+            }
+            if (parent != null && Files.exists(parent) && Files.isDirectory(parent)) {
+                return normalized;
+            }
+        }
+
+        try {
+            URL resourceUrl = getClass().getResource(resourcePath);
+            if (resourceUrl != null && "file".equalsIgnoreCase(resourceUrl.getProtocol())) {
+                return Paths.get(resourceUrl.toURI()).toAbsolutePath().normalize();
+            }
+        } catch (Exception ignored) {
+        }
+
+        return null;
+    }
+
+    private Clip createClipFromBytes(byte[] audioBytes) throws Exception {
+        try (AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(
+                new BufferedInputStream(new ByteArrayInputStream(audioBytes)))) {
+            Clip clip = AudioSystem.getClip();
+            clip.open(audioInputStream);
+            return clip;
         }
     }
 
     private void playAudio() {
         if (audioClip == null) {
             JOptionPane.showMessageDialog(this,
-                    "먼저 음악 파일을 불러오세요.",
+                    "선택한 레벨의 음악이 프리로드되지 않았습니다.",
                     "Info",
                     JOptionPane.INFORMATION_MESSAGE);
             return;
@@ -308,6 +575,94 @@ public class ChartEditor extends JFrame {
         }
     }
 
+    private void updatePresetStatusLabel() {
+        StagePreset preset = getSelectedPreset();
+        Difficulty difficulty = getSelectedDifficulty();
+
+        if (preset == null || difficulty == null) {
+            musicLabel.setText("No preset loaded");
+            return;
+        }
+
+        String musicStatus = audioClip != null
+                ? String.format("%.3f s", getClipLengthSeconds())
+                : "missing";
+
+        musicLabel.setText(String.format(
+                "Preset: %s / %s | BPM: %s | Offset: %s s | Notes: %d | Music: %s | Ctrl+S: overwrite",
+                preset.stage.getLevelName(),
+                difficulty.name(),
+                formatDouble(parseBpm()),
+                formatDouble(parseOffsetSeconds()),
+                lanePanel.getNoteCount(),
+                musicStatus
+        ));
+    }
+
+    private String buildChartResourcePath(Stage stage, Difficulty difficulty) {
+        return "/" + buildChartFileName(stage, difficulty);
+    }
+
+    private String buildChartFileName(Stage stage, Difficulty difficulty) {
+        return stage.getLevelName() + "_" + difficulty.name() + ".txt";
+    }
+
+    private String buildChartCacheKey(Stage stage, Difficulty difficulty) {
+        return stage.getLevelName() + "::" + difficulty.name();
+    }
+
+    private byte[] readBinaryResource(String path) {
+        try (InputStream in = getClass().getResourceAsStream(path)) {
+            if (in == null) {
+                return null;
+            }
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+
+            return out.toByteArray();
+        } catch (Exception e) {
+            System.err.println("[ChartEditor] Failed to preload music: " + path);
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private ArrayList<String> readTextResource(String path) {
+        try (InputStream in = getClass().getResourceAsStream(path)) {
+            if (in == null) {
+                return null;
+            }
+
+            ArrayList<String> lines = new ArrayList<>();
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    lines.add(line);
+                }
+            }
+
+            return lines;
+        } catch (Exception e) {
+            System.err.println("[ChartEditor] Failed to preload chart: " + path);
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private StagePreset getSelectedPreset() {
+        return (StagePreset) stageCombo.getSelectedItem();
+    }
+
+    private Difficulty getSelectedDifficulty() {
+        return (Difficulty) difficultyCombo.getSelectedItem();
+    }
+
     private double beatToSeconds(double beat, double bpm, double offsetSeconds) {
         return beat * (60.0 / bpm) + offsetSeconds;
     }
@@ -348,8 +703,38 @@ public class ChartEditor extends JFrame {
         }
     }
 
+    private String formatDouble(double value) {
+        return String.format("%.3f", value);
+    }
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new ChartEditor().setVisible(true));
+    }
+
+    private static class StagePreset {
+        private final Stage stage;
+        private final EnumMap<Difficulty, Boolean> availableDifficulties = new EnumMap<>(Difficulty.class);
+
+        private StagePreset(Stage stage) {
+            this.stage = stage;
+        }
+
+        private void addAvailableDifficulty(Difficulty difficulty) {
+            availableDifficulties.put(difficulty, true);
+        }
+
+        private boolean hasDifficulty(Difficulty difficulty) {
+            return availableDifficulties.getOrDefault(difficulty, false);
+        }
+
+        private boolean hasAnyDifficulty() {
+            return !availableDifficulties.isEmpty();
+        }
+
+        @Override
+        public String toString() {
+            return stage.getLevelName();
+        }
     }
 }
 
@@ -477,8 +862,75 @@ class LanePanel extends JPanel {
         return scrollOffsetBeats;
     }
 
+    public int getNoteCount() {
+        return notes.size();
+    }
+
     public void clearNotes() {
         notes.clear();
+        repaint();
+    }
+
+    public ArrayList<String> exportChartLines() {
+        ArrayList<String> lines = new ArrayList<>();
+        sortNotes();
+
+        for (NoteData note : notes) {
+            String laneText = switch (note.lane) {
+                case 0 -> "D";
+                case 1 -> "F";
+                case 2 -> "J";
+                case 3 -> "K";
+                default -> throw new IllegalStateException("Unexpected lane: " + note.lane);
+            };
+
+            lines.add(String.format("%.3f %s", note.beat, laneText));
+        }
+
+        return lines;
+    }
+
+    public void loadChartLines(List<String> lines) {
+        notes.clear();
+
+        for (String line : lines) {
+            if (line == null) {
+                continue;
+            }
+
+            line = line.trim();
+            if (line.isEmpty() || line.startsWith("#")) {
+                continue;
+            }
+
+            String[] parts = line.split("\\s+");
+            if (parts.length < 2) {
+                continue;
+            }
+
+            double beat;
+            try {
+                beat = Double.parseDouble(parts[0]);
+            } catch (NumberFormatException e) {
+                continue;
+            }
+
+            int lane = switch (parts[1]) {
+                case "D" -> 0;
+                case "F" -> 1;
+                case "J" -> 2;
+                case "K" -> 3;
+                default -> -1;
+            };
+
+            if (lane == -1) {
+                continue;
+            }
+
+            notes.add(new NoteData(lane, beat));
+        }
+
+        sortNotes();
         repaint();
     }
 
@@ -614,24 +1066,14 @@ class LanePanel extends JPanel {
         g.drawString(String.format("Scroll: %.3f beat", scrollOffsetBeats), 10, 20);
         g.drawString(String.format("Grid: %.3f beat", gridInterval), 10, 40);
         g.drawString(String.format("Cursor: %.3f beat", playbackBeat), 10, 60);
+        g.drawString("Left Click: Add/Remove Note", 10, 95);
+        g.drawString("Mouse Wheel: Scroll", 10, 115);
     }
 
     public void saveChart(File file) {
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
-            sortNotes();
-
-            for (NoteData note : notes) {
-                String laneText = switch (note.lane) {
-                    case 0 -> "D";
-                    case 1 -> "F";
-                    case 2 -> "J";
-                    case 3 -> "K";
-                    default -> throw new IllegalStateException("Unexpected lane: " + note.lane);
-                };
-
-                bw.write(String.format("%.3f %s%n", note.beat, laneText));
-            }
-
+        try {
+            ArrayList<String> lines = exportChartLines();
+            Files.write(file.toPath(), lines, StandardCharsets.UTF_8);
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this,
                     "저장 실패: " + e.getMessage(),
@@ -641,47 +1083,8 @@ class LanePanel extends JPanel {
     }
 
     public void loadChart(File file) {
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-            notes.clear();
-
-            String line;
-            while ((line = br.readLine()) != null) {
-                line = line.trim();
-
-                if (line.isEmpty()) {
-                    continue;
-                }
-
-                String[] parts = line.split("\\s+");
-                if (parts.length < 2) {
-                    continue;
-                }
-
-                double beat;
-                try {
-                    beat = Double.parseDouble(parts[0]);
-                } catch (NumberFormatException e) {
-                    continue;
-                }
-
-                int lane = switch (parts[1]) {
-                    case "D" -> 0;
-                    case "F" -> 1;
-                    case "J" -> 2;
-                    case "K" -> 3;
-                    default -> -1;
-                };
-
-                if (lane == -1) {
-                    continue;
-                }
-
-                notes.add(new NoteData(lane, beat));
-            }
-
-            sortNotes();
-            repaint();
-
+        try {
+            loadChartLines(Files.readAllLines(file.toPath(), StandardCharsets.UTF_8));
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this,
                     "불러오기 실패: " + e.getMessage(),

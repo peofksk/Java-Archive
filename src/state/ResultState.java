@@ -61,10 +61,10 @@ public class ResultState implements GameState {
         g.setFont(new Font("Arial", Font.BOLD, 30));
         g.setColor(Color.GRAY);
 
-        g.drawString("SCORE : ", 150, 250);
+        g.drawString("Score : ", 150, 250);
         g.drawString(String.valueOf(result.getScore()), 320, 250);
 
-        g.drawString("MAX COMBO : ", 150, 300);
+        g.drawString("Max Combo : ", 150, 300);
         g.drawString(String.valueOf(result.getMaxCombo()), 380, 300);
 
         g.drawString("Accuracy : ", 150, 350);
