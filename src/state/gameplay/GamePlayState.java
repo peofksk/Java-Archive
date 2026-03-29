@@ -235,6 +235,10 @@ public class GamePlayState implements GameState {
 
         if (inputLane != null) {
             result = nm.judge(inputLane, judgeTime);
+
+            if (result == Judgement.NONE) {
+                result = Judgement.MISS;
+            }
         }
 
         applyJudgement(result);
@@ -255,7 +259,7 @@ public class GamePlayState implements GameState {
         }
 
         long now = System.nanoTime();
-        timelineTime = (now - songStartNano) / 1_000_000_000.0;
+        timelineTime = ((now - songStartNano) / 1_000_000_000.0) + AUDIO_OUTPUT_LATENCY;
     }
 
     private double getGameplayTime() {

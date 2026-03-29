@@ -93,7 +93,6 @@ public class NoteManager {
             laneNotes.get(lane).sort(Comparator.comparingDouble(Note::getHitTime));
         }
 
-        System.out.println("Chart loaded: " + key);
     }
 
     public int update(double currentTime) {
