@@ -757,7 +757,7 @@ class LanePanel extends JPanel {
 	private final int laneWidth = 100;
 	private final int noteWidth = 60;
 	private final int noteHeight = 12;
-	private final int baseX = 100;
+	private final int baseX = 300;
 
 	private double pixelsPerBeat = 64.0;
 	private double gridInterval = 0.25;
