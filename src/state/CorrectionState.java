@@ -110,7 +110,7 @@ public class CorrectionState implements GameState {
 		}
 
 		drawLaneKeyBindings(g);
-		
+
 		if (!resultMode) {
 			double gameTime = timelineTime + context.getGlobalOffset();
 			renderNotes(g, gameTime);
@@ -347,24 +347,24 @@ public class CorrectionState implements GameState {
 			g2.dispose();
 		}
 	}
-	
+
 	private void drawLaneKeyBindings(Graphics2D g) {
 		Graphics2D g2 = (Graphics2D) g.create();
 
 		try {
 			int startX = 30;
 			int laneWidth = 80;
-			int textY = 430;
+			int textY = 405;
+			int textHeight = 42;
 
 			g2.setFont(new Font("Arial", Font.BOLD, 28));
 
 			for (Lane lane : Lane.values()) {
-				int keyCode = context.getKeyCodeForLane(lane);
-				String keyText = KeyEvent.getKeyText(keyCode);
+				int laneX = startX + lane.ordinal() * laneWidth;
+				String keyText = context.getKeyTextForLane(lane);
 
-				int centerX = startX + lane.ordinal() * laneWidth + laneWidth / 2;
-
-				RenderUtils.drawOutlinedCenteredString(g2, keyText, centerX, textY, Color.WHITE, new Color(0, 0, 0, 180));
+				RenderUtils.drawOutlinedCenteredString(g2, keyText, laneX, textY, laneWidth, textHeight, Color.WHITE,
+						new Color(0, 0, 0, 180));
 			}
 		} finally {
 			g2.dispose();
@@ -390,8 +390,10 @@ public class CorrectionState implements GameState {
 			g2.setFont(new Font("SansSerif", Font.PLAIN, 26));
 			RenderUtils.drawCenteredString(g2, "Hits: " + hitCount, 0, 215, 1024, 40);
 			RenderUtils.drawCenteredString(g2, String.format("Avg Error (abs): %.2f ms", avgAbs), 0, 265, 1024, 40);
-			RenderUtils.drawCenteredString(g2, String.format("Avg Error (signed): %+.2f ms", avgSigned), 0, 305, 1024, 40);
-			RenderUtils.drawCenteredString(g2, String.format("Global Offset: %+.4f s", context.getGlobalOffset()), 0, 355, 1024, 40);
+			RenderUtils.drawCenteredString(g2, String.format("Avg Error (signed): %+.2f ms", avgSigned), 0, 305, 1024,
+					40);
+			RenderUtils.drawCenteredString(g2, String.format("Global Offset: %+.4f s", context.getGlobalOffset()), 0,
+					355, 1024, 40);
 
 			g2.setFont(new Font("SansSerif", Font.PLAIN, 18));
 			RenderUtils.drawCenteredString(g2, "ENTER: Retry ESC: Back", 0, 420, 1024, 35);

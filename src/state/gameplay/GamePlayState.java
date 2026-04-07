@@ -38,7 +38,7 @@ public class GamePlayState implements GameState {
 	private volatile boolean audioStarted = false;
 
 	private static final double LEAD_IN = 3.0;
-	private static final double AUDIO_OUTPUT_LATENCY = 1.0;
+	private static final double AUDIO_OUTPUT_LATENCY = 0.2;
 
 	private volatile long songStartNano = 0L;
 	private long pauseStartNano = 0L;
@@ -190,11 +190,11 @@ public class GamePlayState implements GameState {
 
 			g.setColor(Color.WHITE);
 			g.setFont(new Font("Arial", Font.BOLD, 40));
-			g.drawString("PAUSED", 410, 260);
+			RenderUtils.drawCenteredString(g, "PAUSED", 0, 220, 1024, 50);
 
 			g.setFont(new Font("Arial", Font.PLAIN, 22));
-			g.drawString("Press P to Resume", 390, 305);
-			g.drawString("ESC to Exit", 430, 335);
+			RenderUtils.drawCenteredString(g, "Press ESC to Resume", 0, 285, 1024, 28);
+			RenderUtils.drawCenteredString(g, "Press Enter to Exit", 0, 320, 1024, 28);
 
 			g.setComposite(original);
 		}
@@ -203,12 +203,12 @@ public class GamePlayState implements GameState {
 	@Override
 	public void keyPressed(KeyEvent e) {
 		if (paused) {
-			if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+			if (e.getKeyCode() == KeyEvent.VK_ENTER) {
 				context.changeState(new ResultState(context, buildGameResult()));
 				return;
 			}
 
-			if (e.getKeyCode() == KeyEvent.VK_P) {
+			if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
 				resumeGame();
 			}
 			return;
@@ -218,18 +218,18 @@ public class GamePlayState implements GameState {
 			return;
 		}
 
-		if (e.getKeyCode() == KeyEvent.VK_P) {
+		if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
 			pauseGame();
 			return;
 		}
 
 		Lane inputLane = context.getLaneForKeyCode(e.getKeyCode());
 		if (inputLane != null) {
-		    if (lanePressed[inputLane.ordinal()]) {
-		        return;
-		    }
+			if (lanePressed[inputLane.ordinal()]) {
+				return;
+			}
 
-		    setLanePressed(inputLane, true);
+			setLanePressed(inputLane, true);
 		}
 
 		updateTimelineTime();
@@ -238,11 +238,11 @@ public class GamePlayState implements GameState {
 		double judgeTime = getGameplayTime();
 
 		if (inputLane != null) {
-		    result = nm.judge(inputLane, judgeTime);
+			result = nm.judge(inputLane, judgeTime);
 
-		    if (result == Judgement.NONE) {
-		        result = Judgement.MISS;
-		    }
+			if (result == Judgement.NONE) {
+				result = Judgement.MISS;
+			}
 		}
 
 		applyJudgement(result);
@@ -418,7 +418,7 @@ public class GamePlayState implements GameState {
 		g2.setColor(Color.WHITE);
 		g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, getAlpha()));
 		RenderUtils.drawCenteredString(g2, String.valueOf(combo), 30, 270, 320, 120);
-		
+
 		g2.setFont(new Font("Arial", Font.BOLD, 50));
 		switch (lastJudge) {
 		case "Perfect" -> g2.setColor(Color.BLUE);
@@ -495,17 +495,17 @@ public class GamePlayState implements GameState {
 		try {
 			int startX = 30;
 			int laneWidth = 80;
-			int textY = 430;
+			int textY = 405;
+			int textHeight = 42;
 
 			g2.setFont(new Font("Arial", Font.BOLD, 28));
 
 			for (Lane lane : Lane.values()) {
-				int keyCode = context.getKeyCodeForLane(lane);
-				String keyText = KeyEvent.getKeyText(keyCode);
+				int laneX = startX + lane.ordinal() * laneWidth;
+				String keyText = context.getKeyTextForLane(lane);
 
-				int centerX = startX + lane.ordinal() * laneWidth + laneWidth / 2;
-
-				RenderUtils.drawOutlinedCenteredString(g2, keyText, centerX, textY, Color.WHITE, new Color(0, 0, 0, 180));
+				RenderUtils.drawOutlinedCenteredString(g2, keyText, laneX, textY, laneWidth, textHeight, Color.WHITE,
+						new Color(0, 0, 0, 180));
 			}
 		} finally {
 			g2.dispose();

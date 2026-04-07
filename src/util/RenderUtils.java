@@ -17,19 +17,23 @@ public class RenderUtils {
 		g.drawString(text, drawX, drawY);
 	}
 
-	public static void drawOutlinedCenteredString(Graphics2D g, String text, int centerX, int y, Color fillColor,
-			Color outlineColor) {
-		FontMetrics metrics = g.getFontMetrics(g.getFont());
-		int textWidth = metrics.stringWidth(text);
-		int startX = centerX - (textWidth / 2);
+	public static void drawOutlinedCenteredString(Graphics2D g, String text, int x, int y, int width, int height,
+	        Color fillColor, Color outlineColor) {
+	    FontMetrics fm = g.getFontMetrics();
+	    int drawX = x + (width - fm.stringWidth(text)) / 2;
+	    int drawY = y + ((height - fm.getHeight()) / 2) + fm.getAscent();
 
-		g.setColor(outlineColor);
-		g.drawString(text, startX - 1, y);
-		g.drawString(text, startX + 1, y);
-		g.drawString(text, startX, y - 1);
-		g.drawString(text, startX, y + 1);
+	    Color oldColor = g.getColor();
 
-		g.setColor(fillColor);
-		g.drawString(text, startX, y);
+	    g.setColor(outlineColor);
+	    g.drawString(text, drawX - 1, drawY);
+	    g.drawString(text, drawX + 1, drawY);
+	    g.drawString(text, drawX, drawY - 1);
+	    g.drawString(text, drawX, drawY + 1);
+
+	    g.setColor(fillColor);
+	    g.drawString(text, drawX, drawY);
+
+	    g.setColor(oldColor);
 	}
 }
