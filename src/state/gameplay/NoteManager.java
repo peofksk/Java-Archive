@@ -12,190 +12,194 @@ import stage.Stage;
 
 public class NoteManager {
 
-	private final GameContext context;
-	private final Map<Lane, List<Note>> laneNotes = new EnumMap<>(Lane.class);
+    private final GameContext context;
+    private final Map<Lane, List<Note>> laneNotes = new EnumMap<>(Lane.class);
 
-	private static final double PERFECT_WINDOW = 0.08;
-	private static final double GREAT_WINDOW = 0.10;
-	private static final double GOOD_WINDOW = 0.13;
-	private static final double EARLY_LATE_WINDOW = 0.15;
-	private static final double MISS_WINDOW = 0.20;
+    private static final double PERFECT_WINDOW = 0.08;
+    private static final double GREAT_WINDOW = 0.10;
+    private static final double GOOD_WINDOW = 0.13;
+    private static final double EARLY_LATE_WINDOW = 0.15;
+    private static final double MISS_WINDOW = 0.20;
 
-	private final AssetManager am = AssetManager.getInstance();
+    private final AssetManager am = AssetManager.getInstance();
 
-	private double bpm;
-	private double offset;
+    private final double bpm;
+    private final double offset;
 
-	private double lastHitTimeDiffSeconds = 0.0;
+    private double lastHitTimeDiffSeconds = 0.0;
 
-	public NoteManager(GameContext context, Stage stage) {
-		this(context, stage.getMusicBPM(), stage.getMusicOffsetSeconds());
-	}
+    public NoteManager(GameContext context, Stage stage) {
+        this(context, stage.getMusicBPM(), stage.getMusicOffsetSeconds());
+    }
 
-	public NoteManager(GameContext context, double bpm, double offset) {
-		this.context = context;
-		this.bpm = bpm;
-		this.offset = offset;
+    public NoteManager(GameContext context, double bpm, double offset) {
+        this.context = context;
+        this.bpm = bpm;
+        this.offset = offset;
 
-		for (Lane lane : Lane.values()) {
-			laneNotes.put(lane, new ArrayList<>());
-		}
-	}
+        for (Lane lane : context.getPlayableLanes()) {
+            laneNotes.put(lane, new ArrayList<>());
+        }
+    }
 
-	public void addNote(Note note) {
-		laneNotes.get(note.getLane()).add(note);
-	}
+    public void addNote(Note note) {
+        List<Note> notes = laneNotes.get(note.getLane());
+        if (notes != null) {
+            notes.add(note);
+        }
+    }
 
-	public void loadChart(String key) {
-		ArrayList<String> lines = am.getText(key);
+    public void loadChart(String key) {
+        ArrayList<String> lines = am.getText(key);
 
-		if (lines == null) {
-			System.out.println("Chart not found: " + key);
-			return;
-		}
+        if (lines == null) {
+            System.out.println("Chart not found: " + key);
+            return;
+        }
 
-		for (Lane lane : Lane.values()) {
-			laneNotes.get(lane).clear();
-		}
+        for (Lane lane : context.getPlayableLanes()) {
+            laneNotes.computeIfAbsent(lane, unused -> new ArrayList<>()).clear();
+        }
 
-		lastHitTimeDiffSeconds = 0.0;
+        lastHitTimeDiffSeconds = 0.0;
+        double secondsPerBeat = 60.0 / bpm;
 
-		double secondsPerBeat = 60.0 / bpm;
+        for (String line : lines) {
+            line = line.trim();
 
-		for (String line : lines) {
-			line = line.trim();
+            if (line.isEmpty() || line.startsWith("#")) {
+                continue;
+            }
 
-			if (line.isEmpty() || line.startsWith("#")) {
-				continue;
-			}
+            String[] parts = line.split("\\s+");
+            if (parts.length < 2) {
+                continue;
+            }
 
-			String[] parts = line.split("\\s+");
+            double beat;
+            try {
+                beat = Double.parseDouble(parts[0]);
+            } catch (Exception e) {
+                continue;
+            }
 
-			if (parts.length < 2) {
-				continue;
-			}
+            String laneToken = String.join(" ", java.util.Arrays.copyOfRange(parts, 1, parts.length));
+            Lane lane = Lane.fromChartToken(laneToken);
+            if (lane == null || !context.isPlayableLane(lane)) {
+                continue;
+            }
 
-			double beat;
-			Lane lane;
+            double hitTime = beat * secondsPerBeat + offset;
+            addNote(new Note(lane, hitTime));
+        }
 
-			try {
-				beat = Double.parseDouble(parts[0]);
-			} catch (Exception e) {
-				continue;
-			}
+        for (Lane lane : context.getPlayableLanes()) {
+            laneNotes.get(lane).sort(Comparator.comparingDouble(Note::getHitTime));
+        }
 
-			String laneToken = String.join(" ", java.util.Arrays.copyOfRange(parts, 1, parts.length));
-			lane = Lane.fromChartToken(laneToken);
+        System.out.println("Chart loaded: " + key);
+    }
 
-			if (lane == null) {
-				continue;
-			}
+    public int update(double currentTime) {
+        int missCount = 0;
 
-			double hitTime = beat * secondsPerBeat + offset;
-			addNote(new Note(lane, hitTime));
-		}
+        for (Lane lane : context.getPlayableLanes()) {
+            List<Note> notes = laneNotes.get(lane);
+            if (notes == null) {
+                continue;
+            }
 
-		for (Lane lane : Lane.values()) {
-			laneNotes.get(lane).sort(Comparator.comparingDouble(Note::getHitTime));
-		}
+            while (!notes.isEmpty()) {
+                Note note = notes.get(0);
 
-	}
+                if (!note.isJudged() && currentTime - note.getHitTime() > MISS_WINDOW) {
+                    note.judge();
+                    notes.remove(0);
+                    missCount++;
+                } else {
+                    break;
+                }
+            }
+        }
 
-	public int update(double currentTime) {
-		int missCount = 0;
+        return missCount;
+    }
 
-		for (Lane lane : Lane.values()) {
-			List<Note> notes = laneNotes.get(lane);
+    public Judgement judge(Lane lane, double currentTime) {
+        List<Note> notes = laneNotes.get(lane);
+        if (notes == null || notes.isEmpty()) {
+            return Judgement.NONE;
+        }
 
-			while (!notes.isEmpty()) {
-				Note note = notes.get(0);
+        Note note = notes.get(0);
+        double diff = currentTime - note.getHitTime();
+        lastHitTimeDiffSeconds = diff;
 
-				if (!note.isJudged() && currentTime - note.getHitTime() > MISS_WINDOW) {
-					note.judge();
-					notes.remove(0);
-					missCount++;
-				} else {
-					break;
-				}
-			}
-		}
+        double absDiff = Math.abs(diff);
 
-		return missCount;
-	}
+        if (absDiff <= PERFECT_WINDOW) {
+            note.judge();
+            notes.remove(0);
+            return Judgement.PERFECT;
+        }
 
-	public Judgement judge(Lane lane, double currentTime) {
-		List<Note> notes = laneNotes.get(lane);
+        if (absDiff <= GREAT_WINDOW) {
+            note.judge();
+            notes.remove(0);
+            return Judgement.GREAT;
+        }
 
-		if (notes.isEmpty()) {
-			return Judgement.NONE;
-		}
+        if (absDiff <= GOOD_WINDOW) {
+            note.judge();
+            notes.remove(0);
+            return Judgement.GOOD;
+        }
 
-		Note note = notes.get(0);
+        if (absDiff <= EARLY_LATE_WINDOW) {
+            note.judge();
+            notes.remove(0);
+            return diff < 0 ? Judgement.EARLY : Judgement.LATE;
+        }
 
-		double diff = currentTime - note.getHitTime();
-		lastHitTimeDiffSeconds = diff;
+        return Judgement.NONE;
+    }
 
-		double absDiff = Math.abs(diff);
+    public double getLastHitTimeDiffSeconds() {
+        return lastHitTimeDiffSeconds;
+    }
 
-		if (absDiff <= PERFECT_WINDOW) {
-			note.judge();
-			notes.remove(0);
-			return Judgement.PERFECT;
-		}
+    public Map<Lane, List<Note>> getLaneNotes() {
+        return laneNotes;
+    }
 
-		if (absDiff <= GREAT_WINDOW) {
-			note.judge();
-			notes.remove(0);
-			return Judgement.GREAT;
-		}
+    public boolean isFinished() {
+        for (Lane lane : context.getPlayableLanes()) {
+            List<Note> notes = laneNotes.get(lane);
+            if (notes != null && !notes.isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
 
-		if (absDiff <= GOOD_WINDOW) {
-			note.judge();
-			notes.remove(0);
-			return Judgement.GOOD;
-		}
+    public int getRemainingNoteCount() {
+        int count = 0;
 
-		if (absDiff <= EARLY_LATE_WINDOW) {
-			note.judge();
-			notes.remove(0);
-			return diff < 0 ? Judgement.EARLY : Judgement.LATE;
-		}
+        for (Lane lane : context.getPlayableLanes()) {
+            List<Note> notes = laneNotes.get(lane);
+            if (notes != null) {
+                count += notes.size();
+            }
+        }
 
-		return Judgement.NONE;
-	}
+        return count;
+    }
 
-	public double getLastHitTimeDiffSeconds() {
-		return lastHitTimeDiffSeconds;
-	}
+    public double getBpm() {
+        return bpm;
+    }
 
-	public Map<Lane, List<Note>> getLaneNotes() {
-		return laneNotes;
-	}
-
-	public boolean isFinished() {
-		for (Lane lane : Lane.values()) {
-			if (!laneNotes.get(lane).isEmpty()) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	public int getRemainingNoteCount() {
-		int count = 0;
-
-		for (Lane lane : Lane.values()) {
-			count += laneNotes.get(lane).size();
-		}
-
-		return count;
-	}
-
-	public double getBpm() {
-		return bpm;
-	}
-
-	public double getOffset() {
-		return offset;
-	}
+    public double getOffset() {
+        return offset;
+    }
 }
