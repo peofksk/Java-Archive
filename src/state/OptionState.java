@@ -19,7 +19,6 @@ public class OptionState implements GameState {
 	private static final int PANEL_X = 390;
 	private static final int PANEL_Y = 70;
 	private static final int PANEL_W = 470;
-	private static final int PANEL_H = 450;
 
 	private static final int TITLE_Y = PANEL_Y + 18;
 

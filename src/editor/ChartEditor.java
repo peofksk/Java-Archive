@@ -64,7 +64,9 @@ import state.gameplay.Lane;
 
 public class ChartEditor extends JFrame {
 
-    private final LanePanel lanePanel;
+	private static final long serialVersionUID = 1L;
+	
+	private final LanePanel lanePanel;
     private final Timer playbackTimer;
 
     private final Map<String, StagePreset> presetMap = new LinkedHashMap<>();
@@ -750,8 +752,10 @@ public class ChartEditor extends JFrame {
 }
 
 class LanePanel extends JPanel {
-
-    private final ArrayList<NoteData> notes = new ArrayList<>();
+	
+	private static final long serialVersionUID = 1L;
+	
+	private final ArrayList<NoteData> notes = new ArrayList<>();
     private final List<Lane> lanes = Collections.unmodifiableList(Arrays.asList(Lane.values()));
 
     private final int sidebarWidth = 180;

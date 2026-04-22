@@ -5,7 +5,6 @@ import javax.swing.Timer;
 
 import core.GameContext;
 import core.GamePanel;
-import core.GameState;
 import state.IntroState;
 
 public class JAVA_Archive extends JFrame {
