@@ -14,11 +14,13 @@ public class Init {
 
         am.loadImage("stage_unwelcomeSchool_bg", "/unwelcomeSchoolBackground.png");
         am.loadImage("stage_afterSchoolDessert_bg", "/afterSchoolDessertBackground.png");
+        am.loadImage("stage_operationDotabata_bg", "/operationDotabataBackground.png");
         am.loadImage("stage_comingSoon_bg", "/test.png");
 
-        am.loadImage("title_unwelcomeSchool", "/Title_unwelcomeSchool.png");
-        am.loadImage("title_afterSchoolDessert", "/Title_afterSchoolDessert.png");
-        am.loadImage("title_comingSoon", "/Title_comingSoon.png");
+        am.loadImage("title_unwelcomeSchool", "/title_unwelcomeSchool.png");
+        am.loadImage("title_afterSchoolDessert", "/title_afterSchoolDessert.png");
+        am.loadImage("title_operationDotabata", "/title_operationDotabata.png");
+        am.loadImage("title_comingSoon", "/title_comingSoon.png");
 
         am.loadImage("menu_bar", "/menuBar.png");
         am.loadImage("game_title", "/gameTitle.png");
@@ -45,5 +47,8 @@ public class Init {
         am.loadText("note_afterSchoolDessert_easy", "/afterSchoolDessert_Easy.txt");
         am.loadText("note_afterSchoolDessert_hard", "/afterSchoolDessert_Hard.txt");
         am.loadText("note_afterSchoolDessert_extreme", "/afterSchoolDessert_Extreme.txt");
+        am.loadText("note_operationDotabata_easy", "/operationDotabata_Easy.txt");
+        am.loadText("note_operationDotabata_hard", "/operationDotabata_Hard.txt");
+        am.loadText("note_operationDotabata_extreme", "/operationDotabata_Extreme.txt");
     }
 }

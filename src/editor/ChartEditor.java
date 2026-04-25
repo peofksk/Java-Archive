@@ -63,7 +63,7 @@ import stage.StageManager;
 import state.gameplay.Lane;
 
 public class ChartEditor extends JFrame {
-
+	
 	private static final long serialVersionUID = 1L;
 	
 	private final LanePanel lanePanel;
@@ -772,6 +772,9 @@ class LanePanel extends JPanel {
     private double playbackBeat = 0.0;
     private boolean playbackLineVisible = false;
 
+    private Integer pendingLongLaneIndex = null;
+    private Double pendingLongStartBeat = null;
+
     public LanePanel() {
         setBackground(Color.BLACK);
         setFocusable(true);
@@ -780,7 +783,13 @@ class LanePanel extends JPanel {
             @Override
             public void mousePressed(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e)) {
-                    toggleNoteByMouse(e);
+                    if (e.isShiftDown()) {
+                        placeLongNoteByMouse(e);
+                    } else {
+                        toggleTapNoteByMouse(e);
+                    }
+                } else if (SwingUtilities.isRightMouseButton(e)) {
+                    removeNoteByMouse(e);
                 }
             }
         });
@@ -796,18 +805,84 @@ class LanePanel extends JPanel {
         });
     }
 
-    private void toggleNoteByMouse(MouseEvent e) {
+    private void toggleTapNoteByMouse(MouseEvent e) {
+        NotePlacement placement = resolvePlacement(e);
+        if (placement == null) {
+            return;
+        }
+
+        clearPendingLongAnchor();
+
+        NoteData existing = findNote(placement.laneIndex, placement.snappedBeat);
+        if (existing != null) {
+            notes.remove(existing);
+        } else {
+            notes.add(new NoteData(placement.laneIndex, placement.snappedBeat));
+            sortNotes();
+        }
+
+        repaint();
+    }
+
+    private void placeLongNoteByMouse(MouseEvent e) {
+        NotePlacement placement = resolvePlacement(e);
+        if (placement == null) {
+            return;
+        }
+
+        if (pendingLongLaneIndex == null || pendingLongStartBeat == null || pendingLongLaneIndex != placement.laneIndex) {
+            pendingLongLaneIndex = placement.laneIndex;
+            pendingLongStartBeat = placement.snappedBeat;
+            repaint();
+            return;
+        }
+
+        if (Math.abs(pendingLongStartBeat - placement.snappedBeat) < 0.0001) {
+            pendingLongLaneIndex = placement.laneIndex;
+            pendingLongStartBeat = placement.snappedBeat;
+            repaint();
+            return;
+        }
+
+        double startBeat = Math.min(pendingLongStartBeat, placement.snappedBeat);
+        double endBeat = Math.max(pendingLongStartBeat, placement.snappedBeat);
+
+        removeOverlappingNotes(placement.laneIndex, startBeat, endBeat);
+        notes.add(new NoteData(placement.laneIndex, startBeat, endBeat));
+        sortNotes();
+        clearPendingLongAnchor();
+        repaint();
+    }
+
+    private void removeNoteByMouse(MouseEvent e) {
+        NotePlacement placement = resolvePlacement(e);
+        if (placement == null) {
+            clearPendingLongAnchor();
+            repaint();
+            return;
+        }
+
+        NoteData existing = findNote(placement.laneIndex, placement.snappedBeat);
+        if (existing != null) {
+            notes.remove(existing);
+        }
+
+        clearPendingLongAnchor();
+        repaint();
+    }
+
+    private NotePlacement resolvePlacement(MouseEvent e) {
         int laneWidth = getLaneWidth();
         int baseX = getBaseX();
         int relativeX = e.getX() - baseX;
 
         if (relativeX < 0 || relativeX >= getTrackWidth()) {
-            return;
+            return null;
         }
 
         int laneIndex = relativeX / laneWidth;
         if (laneIndex < 0 || laneIndex >= lanes.size()) {
-            return;
+            return null;
         }
 
         double rawBeat = screenYToBeat(e.getY());
@@ -817,23 +892,27 @@ class LanePanel extends JPanel {
             snappedBeat = 0;
         }
 
-        NoteData existing = findNote(laneIndex, snappedBeat);
+        return new NotePlacement(laneIndex, snappedBeat);
+    }
 
-        if (existing != null) {
-            notes.remove(existing);
-        } else {
-            notes.add(new NoteData(laneIndex, snappedBeat));
-            sortNotes();
-        }
+    private void clearPendingLongAnchor() {
+        pendingLongLaneIndex = null;
+        pendingLongStartBeat = null;
+    }
 
-        repaint();
+    private void removeOverlappingNotes(int laneIndex, double startBeat, double endBeat) {
+        notes.removeIf(note -> note.laneIndex == laneIndex && note.overlaps(startBeat, endBeat));
     }
 
     private NoteData findNote(int laneIndex, double beat) {
         final double epsilon = 0.0001;
 
         for (NoteData note : notes) {
-            if (note.laneIndex == laneIndex && Math.abs(note.beat - beat) < epsilon) {
+            if (note.laneIndex != laneIndex) {
+                continue;
+            }
+
+            if (note.containsBeat(beat, epsilon)) {
                 return note;
             }
         }
@@ -842,7 +921,11 @@ class LanePanel extends JPanel {
     }
 
     private void sortNotes() {
-        notes.sort(Comparator.comparingDouble((NoteData n) -> n.beat).thenComparingInt(n -> n.laneIndex));
+        notes.sort(
+                Comparator.comparingDouble((NoteData n) -> n.beat)
+                        .thenComparingDouble(n -> n.endBeat)
+                        .thenComparingInt(n -> n.laneIndex)
+        );
     }
 
     private double screenYToBeat(int y) {
@@ -911,6 +994,7 @@ class LanePanel extends JPanel {
 
     public void clearNotes() {
         notes.clear();
+        clearPendingLongAnchor();
         repaint();
     }
 
@@ -923,7 +1007,12 @@ class LanePanel extends JPanel {
             if (lane == null) {
                 continue;
             }
-            lines.add(String.format("%.3f %s", note.beat, lane.getDisplayName()));
+
+            if (note.isLongNote()) {
+                lines.add(String.format("%.3f %.3f %s", note.beat, note.endBeat, lane.getDisplayName()));
+            } else {
+                lines.add(String.format("%.3f %s", note.beat, lane.getDisplayName()));
+            }
         }
 
         return lines;
@@ -931,18 +1020,19 @@ class LanePanel extends JPanel {
 
     public void loadChartLines(List<String> lines) {
         notes.clear();
+        clearPendingLongAnchor();
 
-        for (String line : lines) {
-            if (line == null) {
+        for (String rawLine : lines) {
+            if (rawLine == null) {
                 continue;
             }
 
-            line = line.trim();
+            String line = rawLine.trim();
             if (line.isEmpty() || line.startsWith("#")) {
                 continue;
             }
 
-            String[] parts = line.split("\\s+");
+            String[] parts = line.split("\s+");
             if (parts.length < 2) {
                 continue;
             }
@@ -954,7 +1044,24 @@ class LanePanel extends JPanel {
                 continue;
             }
 
-            String laneToken = String.join(" ", Arrays.copyOfRange(parts, 1, parts.length));
+            double endBeat = beat;
+            int laneTokenStartIndex = 1;
+
+            if (parts.length >= 3) {
+                try {
+                    endBeat = Double.parseDouble(parts[1]);
+                    laneTokenStartIndex = 2;
+                } catch (NumberFormatException ignored) {
+                    endBeat = beat;
+                    laneTokenStartIndex = 1;
+                }
+            }
+
+            if (laneTokenStartIndex >= parts.length) {
+                continue;
+            }
+
+            String laneToken = String.join(" ", Arrays.copyOfRange(parts, laneTokenStartIndex, parts.length));
             Lane lane = Lane.fromChartToken(laneToken);
             int laneIndex = getLaneIndex(lane);
 
@@ -962,7 +1069,7 @@ class LanePanel extends JPanel {
                 continue;
             }
 
-            notes.add(new NoteData(laneIndex, beat));
+            notes.add(new NoteData(laneIndex, beat, Math.max(beat, endBeat)));
         }
 
         sortNotes();
@@ -995,6 +1102,7 @@ class LanePanel extends JPanel {
             drawLaneLabels(g2);
             drawPlaybackLine(g2);
             drawNotes(g2);
+            drawPendingLongAnchor(g2);
             drawInfo(g2);
         } finally {
             g2.dispose();
@@ -1113,17 +1221,63 @@ class LanePanel extends JPanel {
         int noteWidth = getNoteWidth();
         int baseX = getBaseX();
 
-        g.setColor(Color.CYAN);
-
         for (NoteData note : notes) {
-            int y = beatToScreenY(note.beat) - noteHeight / 2;
+            int laneX = baseX + note.laneIndex * laneWidth;
+            int x = laneX + (laneWidth - noteWidth) / 2;
+            int startY = beatToScreenY(note.beat) - noteHeight / 2;
 
-            if (y + noteHeight < 0 || y > getHeight()) {
+            if (note.isLongNote()) {
+                int endY = beatToScreenY(note.endBeat) - noteHeight / 2;
+                int topY = Math.min(startY, endY);
+                int bottomY = Math.max(startY, endY);
+                int bodyX = x + Math.max(2, noteWidth / 6);
+                int bodyWidth = Math.max(10, noteWidth - Math.max(4, noteWidth / 3));
+                int bodyTop = topY + noteHeight / 2;
+                int bodyHeight = Math.max(noteHeight, bottomY - topY);
+
+                g.setColor(new Color(120, 220, 255));
+                g.fillRoundRect(bodyX, bodyTop, bodyWidth, bodyHeight, 10, 10);
+
+                g.setColor(new Color(210, 245, 255));
+                g.fillRect(bodyX + 3, bodyTop, Math.max(3, bodyWidth / 5), bodyHeight);
+
+                g.setColor(Color.CYAN);
+                g.fillRoundRect(x, endY, noteWidth, noteHeight, 10, 10);
+                g.setColor(Color.WHITE);
+                g.drawRoundRect(x, endY, noteWidth, noteHeight, 10, 10);
+            }
+
+            if (startY + noteHeight < 0 || startY > getHeight()) {
                 continue;
             }
 
-            int x = baseX + note.laneIndex * laneWidth + (laneWidth - noteWidth) / 2;
-            g.fillRect(x, y, noteWidth, noteHeight);
+            g.setColor(Color.CYAN);
+            g.fillRoundRect(x, startY, noteWidth, noteHeight, 10, 10);
+            g.setColor(Color.WHITE);
+            g.drawRoundRect(x, startY, noteWidth, noteHeight, 10, 10);
+        }
+    }
+
+    private void drawPendingLongAnchor(Graphics2D g) {
+        if (pendingLongLaneIndex == null || pendingLongStartBeat == null) {
+            return;
+        }
+
+        int laneWidth = getLaneWidth();
+        int noteWidth = getNoteWidth();
+        int baseX = getBaseX();
+        int laneX = baseX + pendingLongLaneIndex * laneWidth;
+        int x = laneX + (laneWidth - noteWidth) / 2;
+        int y = beatToScreenY(pendingLongStartBeat) - noteHeight / 2;
+
+        Graphics2D g2 = (Graphics2D) g.create();
+        try {
+            g2.setStroke(new BasicStroke(2f));
+            g2.setColor(Color.ORANGE);
+            g2.drawRoundRect(x - 2, y - 2, noteWidth + 4, noteHeight + 4, 10, 10);
+            g2.drawString("LN START", x + noteWidth + 8, y + 10);
+        } finally {
+            g2.dispose();
         }
     }
 
@@ -1135,8 +1289,10 @@ class LanePanel extends JPanel {
         g.drawString(String.format("Grid: %.3f beat", gridInterval), 10, 40);
         g.drawString(String.format("Cursor: %.3f beat", playbackBeat), 10, 60);
         g.drawString(String.format("Lanes: %d", lanes.size()), 10, 80);
-        g.drawString("Left Click: Add/Remove Note", 10, 110);
-        g.drawString("Mouse Wheel: Scroll", 10, 130);
+        g.drawString("Left Click: Add/Remove Tap", 10, 110);
+        g.drawString("Shift + Left Click x2: Create Long Note", 10, 130);
+        g.drawString("Right Click: Remove Note", 10, 150);
+        g.drawString("Mouse Wheel: Scroll", 10, 170);
     }
 
     public void saveChart(File file) {
@@ -1155,14 +1311,48 @@ class LanePanel extends JPanel {
             JOptionPane.showMessageDialog(this, "불러오기 실패: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
+
+    private static class NotePlacement {
+        final int laneIndex;
+        final double snappedBeat;
+
+        private NotePlacement(int laneIndex, double snappedBeat) {
+            this.laneIndex = laneIndex;
+            this.snappedBeat = snappedBeat;
+        }
+    }
 }
 
 class NoteData {
     int laneIndex;
     double beat;
+    double endBeat;
 
     public NoteData(int laneIndex, double beat) {
+        this(laneIndex, beat, beat);
+    }
+
+    public NoteData(int laneIndex, double beat, double endBeat) {
         this.laneIndex = laneIndex;
         this.beat = beat;
+        this.endBeat = Math.max(beat, endBeat);
+    }
+
+    public boolean isLongNote() {
+        return endBeat - beat > 0.0001;
+    }
+
+    public boolean containsBeat(double value, double epsilon) {
+        if (Math.abs(beat - value) < epsilon) {
+            return true;
+        }
+
+        return isLongNote() && value > beat - epsilon && value < endBeat + epsilon;
+    }
+
+    public boolean overlaps(double start, double end) {
+        double noteStart = beat;
+        double noteEnd = endBeat;
+        return Math.max(noteStart, start) <= Math.min(noteEnd, end) + 0.0001;
     }
 }

@@ -86,7 +86,7 @@ public class LevelSelectState implements GameState {
 				context.changeState(new IntroState(context));
 				return;
 			} else if (e.getKeyCode() == KeyEvent.VK_C) {
-				CorrectionState next = new CorrectionState(context, context.sm.getCurrentCorrectionConfig());
+				CalibrationState next = new CalibrationState(context, context.sm.getCurrentCorrectionConfig());
 				context.changeState(new LoadState(context, "Loading Calibration...", next::preload, () -> next));
 			} else if (e.getKeyCode() == KeyEvent.VK_O) {
 				context.changeState(new OptionState(context));

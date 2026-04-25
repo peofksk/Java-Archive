@@ -7,6 +7,7 @@ import java.awt.GradientPaint;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.event.KeyEvent;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 
@@ -143,7 +144,7 @@ public class GamePlayState implements GameState {
         updateTimelineTime();
         double gameTime = getGameplayTime();
 
-        int missCountThisFrame = nm.update(gameTime);
+        int missCountThisFrame = nm.update(gameTime, lanePressed);
         for (int i = 0; i < missCountThisFrame; i++) {
             applyJudgement(Judgement.MISS);
         }
@@ -223,7 +224,7 @@ public class GamePlayState implements GameState {
 
         if (inputLane != null) {
             result = nm.judge(inputLane, judgeTime);
-            if (result == Judgement.NONE) {
+            if (result == Judgement.NONE && !nm.hasActiveLongNote(inputLane)) {
                 result = Judgement.MISS;
             }
         }
@@ -250,28 +251,91 @@ public class GamePlayState implements GameState {
             int x = layout.getLaneX(lane);
             int laneWidth = layout.getLaneWidth(lane);
 
-            for (Note note : nm.getLaneNotes().getOrDefault(lane, java.util.Collections.emptyList())) {
-                double y = JUDGEMENT_LINE_Y - (note.getHitTime() - gameTime) * NOTE_SCROLL_SPEED;
-                drawNote(g, x, laneWidth, (int) y);
+            for (Note note : nm.getLaneNotes().getOrDefault(lane, Collections.emptyList())) {
+                drawGameplayNote(g, x, laneWidth, note, false, gameTime);
+            }
+
+            Note activeLongNote = nm.getActiveLongNote(lane);
+            if (activeLongNote != null) {
+                drawGameplayNote(g, x, laneWidth, activeLongNote, true, gameTime);
             }
         }
     }
 
-    private void drawNote(Graphics2D g, int laneX, int laneWidth, int y) {
+    private void drawGameplayNote(Graphics2D g, int laneX, int laneWidth, Note note, boolean active, double gameTime) {
+        if (note.isLongNote()) {
+            drawLongNote(g, laneX, laneWidth, note, active, gameTime);
+            return;
+        }
+
+        int y = (int) Math.round(JUDGEMENT_LINE_Y - (note.getHitTime() - gameTime) * NOTE_SCROLL_SPEED);
+        drawNoteHead(g, laneX, laneWidth, y);
+    }
+
+    private void drawLongNote(Graphics2D g, int laneX, int laneWidth, Note note, boolean active, double gameTime) {
+        double headTime = active ? Math.max(note.getHitTime(), gameTime) : note.getHitTime();
+        int headY = (int) Math.round(JUDGEMENT_LINE_Y - (headTime - gameTime) * NOTE_SCROLL_SPEED);
+        int tailY = (int) Math.round(JUDGEMENT_LINE_Y - (note.getEndTime() - gameTime) * NOTE_SCROLL_SPEED);
+
+        int drawWidth = getNoteDrawWidth(laneWidth);
+        int drawHeight = getNoteDrawHeight();
+        int drawX = laneX + (laneWidth - drawWidth) / 2;
+
+        int topY = Math.min(headY, tailY);
+        int bottomY = Math.max(headY, tailY);
+
+        int bodyX = drawX + Math.max(2, drawWidth / 6);
+        int bodyWidth = Math.max(10, drawWidth - Math.max(4, drawWidth / 3));
+        int bodyTop = topY + drawHeight / 2;
+        int bodyBottom = bottomY + drawHeight / 2;
+        int bodyHeight = Math.max(0, bodyBottom - bodyTop);
+
+        if (bodyHeight > 0 && bodyBottom >= -drawHeight && bodyTop <= SCREEN_HEIGHT + drawHeight) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.88f));
+                g2.setColor(new Color(120, 220, 255));
+                g2.fillRoundRect(bodyX, bodyTop, bodyWidth, bodyHeight, 12, 12);
+
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
+                g2.setColor(Color.WHITE);
+                int shineWidth = Math.max(4, bodyWidth / 4);
+                g2.fillRoundRect(bodyX + Math.max(1, bodyWidth / 8), bodyTop, shineWidth, bodyHeight, 10, 10);
+            } finally {
+                g2.dispose();
+            }
+        }
+
+        drawNoteHead(g, laneX, laneWidth, tailY);
+        drawNoteHead(g, laneX, laneWidth, headY);
+    }
+
+    private void drawNoteHead(Graphics2D g, int laneX, int laneWidth, int y) {
+        int drawWidth = getNoteDrawWidth(laneWidth);
+        int drawHeight = getNoteDrawHeight();
+        int drawX = laneX + (laneWidth - drawWidth) / 2;
+
         if (noteImage != null && noteImage.getWidth(null) > 0 && noteImage.getHeight(null) > 0) {
-            int naturalWidth = noteImage.getWidth(null);
-            int naturalHeight = noteImage.getHeight(null);
-            int drawWidth = Math.min(naturalWidth, Math.max(20, laneWidth - 8));
-            int drawHeight = naturalHeight;
-            int drawX = laneX + (laneWidth - drawWidth) / 2;
             g.drawImage(noteImage, drawX, y, drawWidth, drawHeight, null);
             return;
         }
 
-        int fallbackWidth = Math.max(20, laneWidth - 20);
-        int drawX = laneX + (laneWidth - fallbackWidth) / 2;
         g.setColor(Color.CYAN);
-        g.fillRect(drawX, y, fallbackWidth, 16);
+        g.fillRoundRect(drawX, y, drawWidth, drawHeight, 10, 10);
+    }
+
+    private int getNoteDrawWidth(int laneWidth) {
+        if (noteImage != null && noteImage.getWidth(null) > 0) {
+            return Math.min(noteImage.getWidth(null), Math.max(20, laneWidth - 8));
+        }
+        return Math.max(20, laneWidth - 20);
+    }
+
+    private int getNoteDrawHeight() {
+        if (noteImage != null && noteImage.getHeight(null) > 0) {
+            return noteImage.getHeight(null);
+        }
+        return 16;
     }
 
     private void drawJudgementLine(Graphics2D g, LaneLayout layout) {
@@ -282,15 +346,7 @@ public class GamePlayState implements GameState {
     }
 
     private void updateTimelineTime() {
-        double scheduledTime = getScheduledPlaybackTime();
-
-        if (!audioStarted) {
-            timelineTime = scheduledTime;
-            return;
-        }
-
-        double clipTime = context.bgm.getPositionSeconds();
-        timelineTime = Math.max(scheduledTime, clipTime);
+        timelineTime = getScheduledPlaybackTime();
     }
 
     private double getScheduledPlaybackTime() {

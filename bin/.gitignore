@@ -1,6 +1,3 @@
-/Title_afterSchoolDessert.png
-/Title_comingSoon.png
-/Title_unwelcomeSchool.png
 /afterSchoolDessert.wav
 /afterSchoolDessertBackground.png
 /afterSchoolDessert_Easy.txt
@@ -46,6 +43,11 @@
 /note_8.png
 /note_9.png
 /o/
+/operationDotabata.wav
+/operationDotabataBackground.png
+/operationDotabata_Easy.txt
+/operationDotabata_Extreme.txt
+/operationDotabata_Hard.txt
 /optionBackground.jpg
 /optionMusic.wav
 /pressEnter.png
@@ -53,6 +55,7 @@
 /resultMusic.wav
 /sample_afterSchoolDessert.wav
 /sample_comingSoon.wav
+/sample_operationDotabata.wav
 /sample_unwelcomeSchool.wav
 /selectionBackground.png
 /stage/
@@ -60,6 +63,10 @@
 /test.png
 /testGameBackground.png
 /testMusicTitle.png
+/title_afterSchoolDessert.png
+/title_comingSoon.png
+/title_operationDotabata.png
+/title_unwelcomeSchool.png
 /unwelcomeSchool.wav
 /unwelcomeSchoolBackground.png
 /unwelcomeSchool_Easy.txt

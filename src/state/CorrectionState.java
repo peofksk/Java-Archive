@@ -6,6 +6,10 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.event.KeyEvent;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
@@ -30,6 +34,12 @@ public class CorrectionState implements GameState {
     private static final double LEAD_IN = 3.0;
     private static final double AUDIO_OUTPUT_LATENCY = 0.2;
     private static final double NOTE_SCROLL_SPEED = 800.0;
+
+    private static final double OFFSET_SEARCH_MIN_SECONDS = -2.0;
+    private static final double OFFSET_SEARCH_MAX_SECONDS = 2.0;
+    private static final double OFFSET_SEARCH_COARSE_STEP_SECONDS = 0.005;
+    private static final double OFFSET_SEARCH_FINE_STEP_SECONDS = 0.0005;
+    private static final double TAP_MATCH_TOLERANCE_SECONDS = 0.12;
 
     private final GameContext context;
     private final CorrectionConfig correctionConfig;
@@ -59,9 +69,18 @@ public class CorrectionState implements GameState {
     private boolean resultMode = false;
     private boolean offsetApplied = false;
 
+    private double estimatedOffsetMs = 0.0;
+    private double residualAbsMs = 0.0;
+
+    private final ArrayList<Double> tapTimes = new ArrayList<>();
+    private final ArrayList<Double> chartHitTimes = new ArrayList<>();
+
+    private final EnumMap<Lane, Boolean> lanePressed = new EnumMap<>(Lane.class);
+
     public CorrectionState(GameContext context, CorrectionConfig correctionConfig) {
         this.context = context;
         this.correctionConfig = correctionConfig;
+        initializeLanePressedMap();
     }
 
     @Override
@@ -71,6 +90,11 @@ public class CorrectionState implements GameState {
 
         if (!preloaded) {
             preload();
+        } else {
+            nm = new NoteManager(context, correctionConfig.getMusicBPM(), correctionConfig.getMusicOffset());
+            nm.loadChart(correctionConfig.getNoteFilePath());
+            rebuildChartHitTimeline();
+            context.bgm.load(correctionConfig.getMusicPath());
         }
 
         long now = System.nanoTime();
@@ -89,10 +113,7 @@ public class CorrectionState implements GameState {
         double gameTime = getGameplayTime();
 
         if (!resultMode) {
-            int missCount = nm.update(gameTime);
-            for (int i = 0; i < missCount; i++) {
-                applyJudgement(Judgement.MISS);
-            }
+            nm.update(gameTime, lanePressed);
 
             if (audioStarted && !context.bgm.isPlaying() && timelineTime > 0 && nm.isFinished()) {
                 resultMode = true;
@@ -105,6 +126,10 @@ public class CorrectionState implements GameState {
 
     @Override
     public void render(Graphics2D g) {
+        if (!resultMode) {
+            updateTimelineTime();
+        }
+
         LaneLayout layout = getLaneLayout();
 
         if (background != null) {
@@ -154,14 +179,24 @@ public class CorrectionState implements GameState {
 
         Lane inputLane = context.getLaneForKeyCode(key);
         if (inputLane != null) {
-            result = nm.judge(inputLane, judgeTime);
-        }
+            if (isLanePressed(inputLane)) {
+                return;
+            }
 
-        applyJudgement(result);
+            setLanePressed(inputLane, true);
+            tapTimes.add(judgeTime);
+
+            result = nm.judge(inputLane, judgeTime);
+            showTapFeedback(result, judgeTime);
+        }
     }
 
     @Override
     public void keyReleased(KeyEvent e) {
+        Lane inputLane = context.getLaneForKeyCode(e.getKeyCode());
+        if (inputLane != null) {
+            setLanePressed(inputLane, false);
+        }
     }
 
     public void preload() {
@@ -175,9 +210,22 @@ public class CorrectionState implements GameState {
 
         nm = new NoteManager(context, correctionConfig.getMusicBPM(), correctionConfig.getMusicOffset());
         nm.loadChart(correctionConfig.getNoteFilePath());
+        rebuildChartHitTimeline();
 
         context.bgm.load(correctionConfig.getMusicPath());
         preloaded = true;
+    }
+
+    private void rebuildChartHitTimeline() {
+        chartHitTimes.clear();
+
+        for (List<Note> notes : nm.getLaneNotes().values()) {
+            for (Note note : notes) {
+                chartHitTimes.add(note.getHitTime());
+            }
+        }
+
+        chartHitTimes.sort(Comparator.naturalOrder());
     }
 
     private LaneLayout getLaneLayout() {
@@ -185,15 +233,7 @@ public class CorrectionState implements GameState {
     }
 
     private void updateTimelineTime() {
-        double scheduledTime = getScheduledPlaybackTime();
-
-        if (!audioStarted) {
-            timelineTime = scheduledTime;
-            return;
-        }
-
-        double clipTime = context.bgm.getPositionSeconds();
-        timelineTime = Math.max(scheduledTime, clipTime);
+        timelineTime = getScheduledPlaybackTime();
     }
 
     private double getScheduledPlaybackTime() {
@@ -211,6 +251,7 @@ public class CorrectionState implements GameState {
 
         nm = new NoteManager(context, correctionConfig.getMusicBPM(), correctionConfig.getMusicOffset());
         nm.loadChart(correctionConfig.getNoteFilePath());
+        rebuildChartHitTimeline();
 
         long now = System.nanoTime();
         songStartNano = now + (long) (LEAD_IN * 1_000_000_000L);
@@ -229,8 +270,51 @@ public class CorrectionState implements GameState {
         hitCount = 0;
         sumAbsDiffMs = 0.0;
         sumSignedDiffMs = 0.0;
+        estimatedOffsetMs = 0.0;
+        residualAbsMs = 0.0;
         resultMode = false;
         offsetApplied = false;
+        tapTimes.clear();
+        clearLanePressedStates();
+    }
+
+    private void showTapFeedback(Judgement judgement, double tapTime) {
+        judgeAlpha = 0.85f;
+
+        switch (judgement) {
+            case PERFECT -> lastJudge = "Perfect";
+            case GREAT -> lastJudge = "Great";
+            case GOOD -> lastJudge = "Good";
+            case EARLY -> lastJudge = "Early";
+            case LATE -> lastJudge = "Late";
+            case MISS -> lastJudge = "Miss";
+            case NONE -> lastJudge = "Sample";
+            default -> lastJudge = "";
+        }
+
+        double previewDiff = findNearestNoteDiffSeconds(tapTime);
+        lastDiffMs = Double.isNaN(previewDiff) ? 0.0 : previewDiff * 1000.0;
+    }
+
+    private double findNearestNoteDiffSeconds(double tapTime) {
+        if (chartHitTimes.isEmpty()) {
+            return Double.NaN;
+        }
+
+        double bestDiff = Double.NaN;
+        double bestAbs = Double.MAX_VALUE;
+
+        for (double noteTime : chartHitTimes) {
+            double diff = tapTime - noteTime;
+            double abs = Math.abs(diff);
+
+            if (abs < bestAbs) {
+                bestAbs = abs;
+                bestDiff = diff;
+            }
+        }
+
+        return bestDiff;
     }
 
     private void applyOffsetOnce() {
@@ -240,8 +324,119 @@ public class CorrectionState implements GameState {
 
         offsetApplied = true;
 
-        double avgSignedMs = hitCount > 0 ? (sumSignedDiffMs / hitCount) : 0.0;
-        context.setGlobalOffset(context.getGlobalOffset() - (avgSignedMs / 1000.0));
+        CorrectionEstimate estimate = estimateGlobalOffset();
+
+        estimatedOffsetMs = estimate.offsetSeconds * 1000.0;
+        residualAbsMs = estimate.meanAbsResidualSeconds * 1000.0;
+        hitCount = estimate.matchCount;
+        sumAbsDiffMs = residualAbsMs * hitCount;
+        sumSignedDiffMs = estimatedOffsetMs * hitCount;
+
+        context.setGlobalOffset(context.getGlobalOffset() - estimate.offsetSeconds);
+    }
+
+    private CorrectionEstimate estimateGlobalOffset() {
+        if (tapTimes.isEmpty() || chartHitTimes.isEmpty()) {
+            return new CorrectionEstimate(0.0, 0.0, 0);
+        }
+
+        CandidateScore best = null;
+
+        for (double candidate = OFFSET_SEARCH_MIN_SECONDS;
+             candidate <= OFFSET_SEARCH_MAX_SECONDS;
+             candidate += OFFSET_SEARCH_COARSE_STEP_SECONDS) {
+
+            CandidateScore score = scoreCandidateOffset(candidate);
+            if (isBetterScore(score, best)) {
+                best = score;
+            }
+        }
+
+        if (best == null) {
+            return new CorrectionEstimate(0.0, 0.0, 0);
+        }
+
+        double fineStart = Math.max(OFFSET_SEARCH_MIN_SECONDS,
+                best.offsetSeconds - OFFSET_SEARCH_COARSE_STEP_SECONDS);
+        double fineEnd = Math.min(OFFSET_SEARCH_MAX_SECONDS,
+                best.offsetSeconds + OFFSET_SEARCH_COARSE_STEP_SECONDS);
+
+        for (double candidate = fineStart;
+             candidate <= fineEnd;
+             candidate += OFFSET_SEARCH_FINE_STEP_SECONDS) {
+
+            CandidateScore score = scoreCandidateOffset(candidate);
+            if (isBetterScore(score, best)) {
+                best = score;
+            }
+        }
+
+        double refinedOffset = best.offsetSeconds + best.meanSignedResidualSeconds;
+        refinedOffset = Math.max(OFFSET_SEARCH_MIN_SECONDS, Math.min(OFFSET_SEARCH_MAX_SECONDS, refinedOffset));
+
+        CandidateScore refined = scoreCandidateOffset(refinedOffset);
+        if (isBetterScore(refined, best)) {
+            best = refined;
+        }
+
+        return new CorrectionEstimate(
+                best.offsetSeconds,
+                best.meanAbsResidualSeconds,
+                best.matchCount
+        );
+    }
+
+    private CandidateScore scoreCandidateOffset(double candidateOffsetSeconds) {
+        int tapIndex = 0;
+        int noteIndex = 0;
+        int matchCount = 0;
+
+        double sumAbsResidual = 0.0;
+        double sumSignedResidual = 0.0;
+
+        while (tapIndex < tapTimes.size() && noteIndex < chartHitTimes.size()) {
+            double adjustedTap = tapTimes.get(tapIndex) - candidateOffsetSeconds;
+            double diff = adjustedTap - chartHitTimes.get(noteIndex);
+
+            if (Math.abs(diff) <= TAP_MATCH_TOLERANCE_SECONDS) {
+                matchCount++;
+                sumAbsResidual += Math.abs(diff);
+                sumSignedResidual += diff;
+                tapIndex++;
+                noteIndex++;
+            } else if (diff < -TAP_MATCH_TOLERANCE_SECONDS) {
+                tapIndex++;
+            } else {
+                noteIndex++;
+            }
+        }
+
+        if (matchCount == 0) {
+            return new CandidateScore(candidateOffsetSeconds, 0, Double.MAX_VALUE, 0.0);
+        }
+
+        return new CandidateScore(
+                candidateOffsetSeconds,
+                matchCount,
+                sumAbsResidual / matchCount,
+                sumSignedResidual / matchCount
+        );
+    }
+
+    private boolean isBetterScore(CandidateScore candidate, CandidateScore best) {
+        if (candidate == null) {
+            return false;
+        }
+        if (best == null) {
+            return true;
+        }
+        if (candidate.matchCount != best.matchCount) {
+            return candidate.matchCount > best.matchCount;
+        }
+        if (candidate.meanAbsResidualSeconds != best.meanAbsResidualSeconds) {
+            return candidate.meanAbsResidualSeconds < best.meanAbsResidualSeconds;
+        }
+        return Math.abs(candidate.offsetSeconds) < Math.abs(best.offsetSeconds);
     }
 
     private void startScheduledMusicThread() {
@@ -287,67 +482,86 @@ public class CorrectionState implements GameState {
         for (Lane lane : layout.getLanes()) {
             int x = layout.getLaneX(lane);
             int laneWidth = layout.getLaneWidth(lane);
-            List<Note> notes = notesByLane.get(lane);
-
-            if (notes == null) {
-                continue;
-            }
+            List<Note> notes = notesByLane.getOrDefault(lane, Collections.emptyList());
 
             for (Note note : notes) {
-                double y = JUDGEMENT_LINE_Y - (note.getHitTime() - gameTime) * NOTE_SCROLL_SPEED;
-                drawNote(g, x, laneWidth, (int) y);
+                drawNote(g, x, laneWidth, note, false, gameTime);
+            }
+
+            Note activeLongNote = nm.getActiveLongNote(lane);
+            if (activeLongNote != null) {
+                drawNote(g, x, laneWidth, activeLongNote, true, gameTime);
             }
         }
     }
 
-    private void drawNote(Graphics2D g, int laneX, int laneWidth, int y) {
+    private void drawNote(Graphics2D g, int laneX, int laneWidth, Note note, boolean active, double gameTime) {
+        if (note.isLongNote()) {
+            drawLongNote(g, laneX, laneWidth, note, active, gameTime);
+            return;
+        }
+
+        int y = (int) Math.round(JUDGEMENT_LINE_Y - (note.getHitTime() - gameTime) * NOTE_SCROLL_SPEED);
+        drawNoteHead(g, laneX, laneWidth, y);
+    }
+
+    private void drawLongNote(Graphics2D g, int laneX, int laneWidth, Note note, boolean active, double gameTime) {
+        double headTime = active ? Math.max(note.getHitTime(), gameTime) : note.getHitTime();
+        int headY = (int) Math.round(JUDGEMENT_LINE_Y - (headTime - gameTime) * NOTE_SCROLL_SPEED);
+        int tailY = (int) Math.round(JUDGEMENT_LINE_Y - (note.getEndTime() - gameTime) * NOTE_SCROLL_SPEED);
+
+        int drawWidth = getNoteDrawWidth(laneWidth);
+        int drawHeight = getNoteDrawHeight();
+        int drawX = laneX + (laneWidth - drawWidth) / 2;
+
+        int topY = Math.min(headY, tailY);
+        int bottomY = Math.max(headY, tailY);
+        int bodyX = drawX + Math.max(2, drawWidth / 6);
+        int bodyWidth = Math.max(10, drawWidth - Math.max(4, drawWidth / 3));
+        int bodyTop = topY + drawHeight / 2;
+        int bodyHeight = Math.max(0, (bottomY + drawHeight / 2) - bodyTop);
+
+        if (bodyHeight > 0) {
+            g.setColor(new Color(120, 220, 255));
+            g.fillRoundRect(bodyX, bodyTop, bodyWidth, bodyHeight, 12, 12);
+        }
+
+        drawNoteHead(g, laneX, laneWidth, tailY);
+        drawNoteHead(g, laneX, laneWidth, headY);
+    }
+
+    private void drawNoteHead(Graphics2D g, int laneX, int laneWidth, int y) {
+        int drawWidth = getNoteDrawWidth(laneWidth);
+        int drawHeight = getNoteDrawHeight();
+        int drawX = laneX + (laneWidth - drawWidth) / 2;
+
         if (noteImage != null && noteImage.getWidth(null) > 0 && noteImage.getHeight(null) > 0) {
-            int naturalWidth = noteImage.getWidth(null);
-            int naturalHeight = noteImage.getHeight(null);
-            int drawWidth = Math.min(naturalWidth, Math.max(20, laneWidth - 8));
-            int drawHeight = naturalHeight;
-            int drawX = laneX + (laneWidth - drawWidth) / 2;
             g.drawImage(noteImage, drawX, y, drawWidth, drawHeight, null);
             return;
         }
 
-        int fallbackWidth = Math.max(20, laneWidth - 20);
-        int drawX = laneX + (laneWidth - fallbackWidth) / 2;
         g.setColor(Color.CYAN);
-        g.fillRect(drawX, y, fallbackWidth, 16);
+        g.fillRoundRect(drawX, y, drawWidth, drawHeight, 10, 10);
+    }
+
+    private int getNoteDrawWidth(int laneWidth) {
+        if (noteImage != null && noteImage.getWidth(null) > 0) {
+            return Math.min(noteImage.getWidth(null), Math.max(20, laneWidth - 8));
+        }
+        return Math.max(20, laneWidth - 20);
+    }
+
+    private int getNoteDrawHeight() {
+        if (noteImage != null && noteImage.getHeight(null) > 0) {
+            return noteImage.getHeight(null);
+        }
+        return 16;
     }
 
     private void drawJudgementLine(Graphics2D g, LaneLayout layout) {
         if (judgementLine != null) {
             int lineHeight = judgementLine.getHeight(null) > 0 ? judgementLine.getHeight(null) : 8;
             g.drawImage(judgementLine, layout.getStartX(), JUDGEMENT_LINE_Y, layout.getTotalWidth(), lineHeight, null);
-        }
-    }
-
-    private void applyJudgement(Judgement j) {
-        if (j == Judgement.NONE) {
-            return;
-        }
-
-        judgeAlpha = 0.85f;
-
-        switch (j) {
-            case PERFECT -> lastJudge = "Perfect";
-            case GREAT -> lastJudge = "Great";
-            case GOOD -> lastJudge = "Good";
-            case EARLY -> lastJudge = "Early";
-            case LATE -> lastJudge = "Late";
-            case MISS -> lastJudge = "Miss";
-            default -> lastJudge = "";
-        }
-
-        if (j != Judgement.MISS) {
-            lastDiffMs = nm.getLastHitTimeDiffSeconds() * 1000.0;
-            hitCount++;
-            sumAbsDiffMs += Math.abs(lastDiffMs);
-            sumSignedDiffMs += lastDiffMs;
-        } else {
-            lastDiffMs = 0.0;
         }
     }
 
@@ -368,6 +582,8 @@ public class CorrectionState implements GameState {
                 g2.setColor(Color.ORANGE);
             } else if ("Miss".equals(lastJudge)) {
                 g2.setColor(Color.GRAY);
+            } else if ("Sample".equals(lastJudge)) {
+                g2.setColor(Color.WHITE);
             } else {
                 g2.setColor(Color.WHITE);
             }
@@ -375,7 +591,7 @@ public class CorrectionState implements GameState {
             RenderUtils.drawCenteredString(g2, lastJudge, 30, 180, 320, 80);
 
             g2.setFont(new Font("SansSerif", Font.BOLD, 28));
-            if (!lastJudge.isEmpty() && !"Miss".equals(lastJudge)) {
+            if (!lastJudge.isEmpty()) {
                 RenderUtils.drawCenteredString(g2, String.format("%+.1f ms", lastDiffMs), 30, 240, 320, 70);
             }
         } finally {
@@ -413,6 +629,27 @@ public class CorrectionState implements GameState {
         }
     }
 
+    private void initializeLanePressedMap() {
+        lanePressed.clear();
+        for (Lane lane : Lane.values()) {
+            lanePressed.put(lane, false);
+        }
+    }
+
+    private boolean isLanePressed(Lane lane) {
+        return lanePressed.getOrDefault(lane, false);
+    }
+
+    private void setLanePressed(Lane lane, boolean pressed) {
+        lanePressed.put(lane, pressed);
+    }
+
+    private void clearLanePressedStates() {
+        for (Lane lane : Lane.values()) {
+            lanePressed.put(lane, false);
+        }
+    }
+
     private void renderResult(Graphics2D g) {
         Graphics2D g2 = (Graphics2D) g.create();
 
@@ -430,13 +667,14 @@ public class CorrectionState implements GameState {
             double avgSigned = hitCount > 0 ? (sumSignedDiffMs / hitCount) : 0.0;
 
             g2.setFont(new Font("SansSerif", Font.PLAIN, 26));
-            RenderUtils.drawCenteredString(g2, "Hits: " + hitCount, 0, 215, SCREEN_WIDTH, 40);
-            RenderUtils.drawCenteredString(g2, String.format("Avg Error (abs): %.2f ms", avgAbs), 0, 265, SCREEN_WIDTH, 40);
-            RenderUtils.drawCenteredString(g2, String.format("Avg Error (signed): %+.2f ms", avgSigned), 0, 305, SCREEN_WIDTH, 40);
-            RenderUtils.drawCenteredString(g2, String.format("Global Offset: %+.4f s", context.getGlobalOffset()), 0, 355, SCREEN_WIDTH, 40);
+            RenderUtils.drawCenteredString(g2, "Matched Samples: " + hitCount, 0, 205, SCREEN_WIDTH, 40);
+            RenderUtils.drawCenteredString(g2, String.format("Estimated Offset: %+.2f ms", estimatedOffsetMs), 0, 250, SCREEN_WIDTH, 40);
+            RenderUtils.drawCenteredString(g2, String.format("Residual Error (abs): %.2f ms", residualAbsMs), 0, 295, SCREEN_WIDTH, 40);
+            RenderUtils.drawCenteredString(g2, String.format("Avg Error (signed): %+.2f ms", avgSigned), 0, 340, SCREEN_WIDTH, 40);
+            RenderUtils.drawCenteredString(g2, String.format("Global Offset: %+.4f s", context.getGlobalOffset()), 0, 385, SCREEN_WIDTH, 40);
 
             g2.setFont(new Font("SansSerif", Font.PLAIN, 18));
-            RenderUtils.drawCenteredString(g2, "ENTER: Retry ESC: Back", 0, 420, SCREEN_WIDTH, 35);
+            RenderUtils.drawCenteredString(g2, "ENTER: Retry ESC: Back", 0, 440, SCREEN_WIDTH, 35);
         } finally {
             g2.dispose();
         }
@@ -462,5 +700,32 @@ public class CorrectionState implements GameState {
         }
 
         g.setComposite(original);
+    }
+
+    private static class CandidateScore {
+        final double offsetSeconds;
+        final int matchCount;
+        final double meanAbsResidualSeconds;
+        final double meanSignedResidualSeconds;
+
+        CandidateScore(double offsetSeconds, int matchCount,
+                       double meanAbsResidualSeconds, double meanSignedResidualSeconds) {
+            this.offsetSeconds = offsetSeconds;
+            this.matchCount = matchCount;
+            this.meanAbsResidualSeconds = meanAbsResidualSeconds;
+            this.meanSignedResidualSeconds = meanSignedResidualSeconds;
+        }
+    }
+
+    private static class CorrectionEstimate {
+        final double offsetSeconds;
+        final double meanAbsResidualSeconds;
+        final int matchCount;
+
+        CorrectionEstimate(double offsetSeconds, double meanAbsResidualSeconds, int matchCount) {
+            this.offsetSeconds = offsetSeconds;
+            this.meanAbsResidualSeconds = meanAbsResidualSeconds;
+            this.matchCount = matchCount;
+        }
     }
 }
