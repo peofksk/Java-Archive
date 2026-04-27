@@ -7,11 +7,15 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.event.KeyEvent;
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
 
 import asset.AssetManager;
 import core.GameContext;
 import core.GameState;
 import stage.CorrectionConfig;
+import state.gameplay.Lane;
 import util.RenderUtils;
 
 public class CalibrationState implements GameState {
@@ -28,6 +32,10 @@ public class CalibrationState implements GameState {
 
     private static final int ORBIT_RADIUS = 170;
     private static final int NOTE_DRAW_SIZE = 42;
+
+    private static final double HIT_MARKER_LIFETIME = 0.35;
+    private static final int HIT_MARKER_BASE_RADIUS = 18;
+    private static final int HIT_MARKER_EXPAND_RADIUS = 16;
 
     private final GameContext context;
     private final CorrectionConfig correctionConfig;
@@ -50,6 +58,9 @@ public class CalibrationState implements GameState {
     private final double musicOffsetSeconds;
     private final double rotationBeats;
 
+    private final EnumMap<Lane, Boolean> lanePressed = new EnumMap<>(Lane.class);
+    private final List<OrbitHitMarker> hitMarkers = new ArrayList<>();
+
     public CalibrationState(GameContext context, CorrectionConfig correctionConfig) {
         this(context, correctionConfig, DEFAULT_ROTATION_BEATS);
     }
@@ -60,6 +71,7 @@ public class CalibrationState implements GameState {
         this.bpm = correctionConfig.getMusicBPM();
         this.musicOffsetSeconds = correctionConfig.getMusicOffset();
         this.rotationBeats = rotationBeats <= 0.0 ? DEFAULT_ROTATION_BEATS : rotationBeats;
+        initializeLanePressedMap();
     }
 
     @Override
@@ -71,6 +83,9 @@ public class CalibrationState implements GameState {
         } else {
             context.bgm.load(correctionConfig.getMusicPath());
         }
+
+        clearLanePressedStates();
+        hitMarkers.clear();
 
         paused = false;
         audioStarted = false;
@@ -91,13 +106,13 @@ public class CalibrationState implements GameState {
 
     @Override
     public void update(double deltaTime) {
-        if (paused) {
-            return;
+        if (!paused) {
+            updateTimelineTime();
         }
 
-        updateTimelineTime();
+        updateHitMarkers(deltaTime);
 
-        if (audioStarted && !context.bgm.isPlaying() && timelineTime > 0) {
+        if (!paused && audioStarted && !context.bgm.isPlaying() && timelineTime > 0) {
             restartPlayback();
         }
     }
@@ -145,6 +160,17 @@ public class CalibrationState implements GameState {
             return;
         }
 
+        Lane inputLane = context.getLaneForKeyCode(keyCode);
+        if (inputLane != null) {
+            if (isLanePressed(inputLane)) {
+                return;
+            }
+
+            setLanePressed(inputLane, true);
+            addHitMarkerAtCurrentOrbitPosition(inputLane);
+            return;
+        }
+
         if (paused) {
             return;
         }
@@ -161,9 +187,13 @@ public class CalibrationState implements GameState {
 
     @Override
     public void keyReleased(KeyEvent e) {
+        Lane inputLane = context.getLaneForKeyCode(e.getKeyCode());
+        if (inputLane != null) {
+            setLanePressed(inputLane, false);
+        }
     }
 
-    public void preload() {
+    void preload() {
         background = am.getImage(correctionConfig.getBackgroundImageKey());
         noteImage = am.getImage("note_" + context.getNoteIndex());
         context.bgm.load(correctionConfig.getMusicPath());
@@ -225,6 +255,9 @@ public class CalibrationState implements GameState {
         context.bgm.stop();
         context.bgm.load(correctionConfig.getMusicPath());
 
+        clearLanePressedStates();
+        hitMarkers.clear();
+
         paused = false;
         audioStarted = false;
         musicThreadStarted = false;
@@ -281,6 +314,7 @@ public class CalibrationState implements GameState {
             drawOrbit(g2, centerX, centerY);
             drawBeatMarkers(g2, centerX, centerY);
             drawHitMarker(g2, centerX, centerY);
+            drawOrbitHitMarkers(g2, centerX, centerY);
             drawRotatingNote(g2, centerX, centerY);
         } finally {
             g2.dispose();
@@ -354,6 +388,65 @@ public class CalibrationState implements GameState {
         g.drawOval(x - NOTE_DRAW_SIZE / 2, y - NOTE_DRAW_SIZE / 2, NOTE_DRAW_SIZE, NOTE_DRAW_SIZE);
     }
 
+    private void drawOrbitHitMarkers(Graphics2D g, int centerX, int centerY) {
+        if (hitMarkers.isEmpty()) {
+            return;
+        }
+
+        Graphics2D g2 = (Graphics2D) g.create();
+        try {
+            for (OrbitHitMarker marker : hitMarkers) {
+                float progress = (float) (1.0 - (marker.life / marker.maxLife));
+                float alpha = (float) Math.max(0.0, marker.life / marker.maxLife);
+
+                int radius = HIT_MARKER_BASE_RADIUS + Math.round(HIT_MARKER_EXPAND_RADIUS * progress);
+
+                int x = centerX + (int) Math.round(Math.cos(marker.angle) * ORBIT_RADIUS);
+                int y = centerY + (int) Math.round(Math.sin(marker.angle) * ORBIT_RADIUS);
+
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha * 0.90f));
+                g2.setColor(Color.WHITE);
+                g2.setStroke(new BasicStroke(3f));
+                g2.drawOval(x - radius, y - radius, radius * 2, radius * 2);
+
+                int innerRadius = Math.max(6, radius / 3);
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha * 0.35f));
+                g2.setColor(getLaneMarkerColor(marker.lane));
+                g2.fillOval(x - innerRadius, y - innerRadius, innerRadius * 2, innerRadius * 2);
+            }
+        } finally {
+            g2.dispose();
+        }
+    }
+
+    private Color getLaneMarkerColor(Lane lane) {
+        if (lane == null) {
+            return new Color(120, 220, 255);
+        }
+
+        return switch (lane.ordinal() % 4) {
+            case 0 -> new Color(255, 120, 120);
+            case 1 -> new Color(120, 180, 255);
+            case 2 -> new Color(120, 255, 170);
+            default -> new Color(255, 220, 120);
+        };
+    }
+
+    private void addHitMarkerAtCurrentOrbitPosition(Lane lane) {
+        hitMarkers.add(new OrbitHitMarker(lane, getRotationAngle(), HIT_MARKER_LIFETIME));
+    }
+
+    private void updateHitMarkers(double deltaTime) {
+        for (int i = hitMarkers.size() - 1; i >= 0; i--) {
+            OrbitHitMarker marker = hitMarkers.get(i);
+            marker.life -= deltaTime;
+
+            if (marker.life <= 0.0) {
+                hitMarkers.remove(i);
+            }
+        }
+    }
+
     private double getRotationAngle() {
         double secondsPerBeat = 60.0 / bpm;
 
@@ -405,11 +498,12 @@ public class CalibrationState implements GameState {
 
             g2.setFont(new Font("Arial", Font.PLAIN, 18));
             g2.setColor(Color.WHITE);
-            g2.drawString("Left / Right : -1ms / +1ms", 690, 430);
-            g2.drawString("Shift + Arrow : -10ms / +10ms", 690, 455);
-            g2.drawString("Space : Pause / Resume", 690, 480);
-            g2.drawString("R : Restart", 690, 505);
-            g2.drawString("Enter or ESC : Exit", 690, 530);
+            g2.drawString("Lane Key : Leave hit circle", 690, 430);
+            g2.drawString("Left / Right : -1ms / +1ms", 690, 455);
+            g2.drawString("Shift + Arrow : -10ms / +10ms", 690, 480);
+            g2.drawString("Space : Pause / Resume", 690, 505);
+            g2.drawString("R : Restart", 690, 530);
+            g2.drawString("Enter or ESC : Exit", 690, 555);
 
         } finally {
             g2.dispose();
@@ -438,6 +532,41 @@ public class CalibrationState implements GameState {
             RenderUtils.drawCenteredString(g2, "Press SPACE to resume", 0, 280, SCREEN_WIDTH, 30);
         } finally {
             g2.dispose();
+        }
+    }
+
+    private void initializeLanePressedMap() {
+        lanePressed.clear();
+        for (Lane lane : Lane.values()) {
+            lanePressed.put(lane, false);
+        }
+    }
+
+    private boolean isLanePressed(Lane lane) {
+        return lanePressed.getOrDefault(lane, false);
+    }
+
+    private void setLanePressed(Lane lane, boolean pressed) {
+        lanePressed.put(lane, pressed);
+    }
+
+    private void clearLanePressedStates() {
+        for (Lane lane : Lane.values()) {
+            lanePressed.put(lane, false);
+        }
+    }
+
+    private static class OrbitHitMarker {
+        private final Lane lane;
+        private final double angle;
+        private final double maxLife;
+        private double life;
+
+        private OrbitHitMarker(Lane lane, double angle, double life) {
+            this.lane = lane;
+            this.angle = angle;
+            this.life = life;
+            this.maxLife = life;
         }
     }
 }
