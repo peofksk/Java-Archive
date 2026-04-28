@@ -20,7 +20,7 @@ public class GameContext {
 
     private GameState currentState;
     private Difficulty currentDifficulty = Difficulty.Easy;
-    private double GLOBAL_OFFSET = -0.045;
+    private double GLOBAL_OFFSET = -0.08;
 
     private final EnumMap<Lane, Integer> laneKeyBindings = new EnumMap<>(Lane.class);
     private final ArrayList<Lane> playableLanes = new ArrayList<>();
