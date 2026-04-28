@@ -24,6 +24,7 @@ public class NoteManager {
 	private final GameContext context;
 	private final Map<Lane, List<Note>> laneNotes = new EnumMap<>(Lane.class);
 	private final Map<Lane, Note> activeLongNotes = new EnumMap<>(Lane.class);
+	private final List<Judgement> pendingJudgements = new ArrayList<>();
 
 	private final AssetManager am = AssetManager.getInstance();
 
@@ -65,6 +66,7 @@ public class NoteManager {
 			laneNotes.computeIfAbsent(lane, unused -> new ArrayList<>()).clear();
 		}
 		activeLongNotes.clear();
+		pendingJudgements.clear();
 
 		lastHitTimeDiffSeconds = 0.0;
 		double secondsPerBeat = 60.0 / bpm;
@@ -177,12 +179,16 @@ public class NoteManager {
 
 				if (releasedTooEarly) {
 					activeLongNote.failLongNote();
+					activeLongNotes.remove(lane);
 					missCount++;
-				} else {
-					activeLongNote.finishLongNote();
+					continue;
 				}
 
-				activeLongNotes.remove(lane);
+				if (currentTime - activeLongNote.getEndTime() > EARLY_LATE_WINDOW) {
+					activeLongNote.finishLongNote();
+					activeLongNotes.remove(lane);
+					pendingJudgements.add(Judgement.PERFECT);
+				}
 			}
 		}
 
@@ -228,6 +234,47 @@ public class NoteManager {
 		return Judgement.NONE;
 	}
 
+	public Judgement judgeLongNoteEnd(Lane lane, double currentTime) {
+		Note note = activeLongNotes.get(lane);
+		if (note == null) {
+			return Judgement.NONE;
+		}
+
+		double diff = currentTime - note.getEndTime();
+		double absDiff = Math.abs(diff);
+
+		if (absDiff <= PERFECT_WINDOW) {
+			note.finishLongNote();
+			activeLongNotes.remove(lane);
+			return Judgement.PERFECT;
+		}
+		if (absDiff <= GREAT_WINDOW) {
+			note.finishLongNote();
+			activeLongNotes.remove(lane);
+			return Judgement.GREAT;
+		}
+		if (absDiff <= GOOD_WINDOW) {
+			note.finishLongNote();
+			activeLongNotes.remove(lane);
+			return Judgement.GOOD;
+		}
+		if (absDiff <= EARLY_LATE_WINDOW) {
+			note.finishLongNote();
+			activeLongNotes.remove(lane);
+			return diff < 0 ? Judgement.EARLY : Judgement.LATE;
+		}
+
+		if (diff < -EARLY_LATE_WINDOW) {
+			note.failLongNote();
+			activeLongNotes.remove(lane);
+			return Judgement.MISS;
+		}
+
+		note.finishLongNote();
+		activeLongNotes.remove(lane);
+		return Judgement.PERFECT;
+	}
+
 	private Judgement finalizeJudgement(Note note, List<Note> notes, Judgement judgement) {
 		if (note.isLongNote()) {
 			note.activateLongNote();
@@ -238,6 +285,12 @@ public class NoteManager {
 
 		notes.remove(0);
 		return judgement;
+	}
+
+	public List<Judgement> drainPendingJudgements() {
+		List<Judgement> result = new ArrayList<>(pendingJudgements);
+		pendingJudgements.clear();
+		return result;
 	}
 
 	public double getLastHitTimeDiffSeconds() {
@@ -275,12 +328,18 @@ public class NoteManager {
 	}
 
 	public int getRemainingNoteCount() {
-		int count = activeLongNotes.size();
+		int count = 0;
+
+		for (Note note : activeLongNotes.values()) {
+			count += note.isLongNote() ? 1 : 1;
+		}
 
 		for (Lane lane : context.getPlayableLanes()) {
 			List<Note> notes = laneNotes.get(lane);
 			if (notes != null) {
-				count += notes.size();
+				for (Note note : notes) {
+					count += note.isLongNote() ? 2 : 1;
+				}
 			}
 		}
 

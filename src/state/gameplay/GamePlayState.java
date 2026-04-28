@@ -149,11 +149,17 @@ public class GamePlayState implements GameState {
 			applyJudgement(Judgement.MISS);
 		}
 
+		for (Judgement judgement : nm.drainPendingJudgements()) {
+			applyJudgement(judgement);
+		}
+
 		if (audioStarted && !context.bgm.isPlaying() && timelineTime > 0 && nm.isFinished()) {
 			clearLanePressedStates();
 			resultRequested = true;
 			context.changeState(new ResultState(context, buildGameResult()));
 		}
+		
+		
 	}
 
 	@Override
@@ -236,9 +242,17 @@ public class GamePlayState implements GameState {
 	@Override
 	public void keyReleased(KeyEvent e) {
 		Lane inputLane = context.getLaneForKeyCode(e.getKeyCode());
-		if (inputLane != null) {
-			setLanePressed(inputLane, false);
+		if (inputLane == null) {
+			return;
 		}
+
+		updateTimelineTime();
+		double judgeTime = getGameplayTime();
+
+		Judgement result = nm.judgeLongNoteEnd(inputLane, judgeTime);
+
+		setLanePressed(inputLane, false);
+		applyJudgement(result);
 	}
 
 	private LaneLayout getLaneLayout() {
