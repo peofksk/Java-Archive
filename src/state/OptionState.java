@@ -178,5 +178,6 @@ public class OptionState implements GameState {
 
 	@Override
 	public void exit() {
+		context.saveSettings();
 	}
 }

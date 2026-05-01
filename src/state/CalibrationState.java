@@ -101,6 +101,7 @@ public class CalibrationState implements GameState {
 
     @Override
     public void exit() {
+    	context.saveSettings();
         context.bgm.stop();
     }
 

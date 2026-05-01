@@ -11,12 +11,17 @@ public class Init {
         am.loadImage("option_bg", "/optionBackground.jpg");
         am.loadImage("correction_bg", "/correctionBackground.png");
         am.loadImage("result_bg", "/resultBackground.png");
-
+        
         am.loadImage("stage_unwelcomeSchool_bg", "/unwelcomeSchoolBackground.png");
         am.loadImage("stage_afterSchoolDessert_bg", "/afterSchoolDessertBackground.png");
         am.loadImage("stage_operationDotabata_bg", "/operationDotabataBackground.png");
         am.loadImage("stage_comingSoon_bg", "/test.png");
-
+        /*
+        am.loadImage("stage_unwelcomeSchool_bg", "/testGameBackground.png");
+        am.loadImage("stage_afterSchoolDessert_bg", "/testGameBackground.png");
+        am.loadImage("stage_operationDotabata_bg", "/testGameBackground.png");
+        am.loadImage("stage_comingSoon_bg", "/testGameBackground.png");
+*/
         am.loadImage("title_unwelcomeSchool", "/title_unwelcomeSchool.png");
         am.loadImage("title_afterSchoolDessert", "/title_afterSchoolDessert.png");
         am.loadImage("title_operationDotabata", "/title_operationDotabata.png");
