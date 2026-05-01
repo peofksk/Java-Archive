@@ -65,6 +65,7 @@ public class NoteManager {
 		for (Lane lane : context.getPlayableLanes()) {
 			laneNotes.computeIfAbsent(lane, unused -> new ArrayList<>()).clear();
 		}
+
 		activeLongNotes.clear();
 		pendingJudgements.clear();
 
@@ -118,6 +119,7 @@ public class NoteManager {
 
 			double hitTime = startBeat * secondsPerBeat + offset;
 			double endTime = Math.max(startBeat, endBeat) * secondsPerBeat + offset;
+
 			addNote(new Note(lane, hitTime, endTime));
 		}
 
@@ -184,11 +186,9 @@ public class NoteManager {
 					continue;
 				}
 
-				if (currentTime - activeLongNote.getEndTime() > EARLY_LATE_WINDOW) {
-					activeLongNote.finishLongNote();
-					activeLongNotes.remove(lane);
-					pendingJudgements.add(Judgement.PERFECT);
-				}
+				activeLongNote.finishLongNote();
+				activeLongNotes.remove(lane);
+				pendingJudgements.add(Judgement.PERFECT);
 			}
 		}
 
@@ -243,36 +243,39 @@ public class NoteManager {
 		double diff = currentTime - note.getEndTime();
 		double absDiff = Math.abs(diff);
 
+		if (diff >= 0.0) {
+			note.finishLongNote();
+			activeLongNotes.remove(lane);
+			return Judgement.PERFECT;
+		}
+
 		if (absDiff <= PERFECT_WINDOW) {
 			note.finishLongNote();
 			activeLongNotes.remove(lane);
 			return Judgement.PERFECT;
 		}
+
 		if (absDiff <= GREAT_WINDOW) {
 			note.finishLongNote();
 			activeLongNotes.remove(lane);
 			return Judgement.GREAT;
 		}
+
 		if (absDiff <= GOOD_WINDOW) {
 			note.finishLongNote();
 			activeLongNotes.remove(lane);
 			return Judgement.GOOD;
 		}
+
 		if (absDiff <= EARLY_LATE_WINDOW) {
 			note.finishLongNote();
 			activeLongNotes.remove(lane);
-			return diff < 0 ? Judgement.EARLY : Judgement.LATE;
+			return Judgement.EARLY;
 		}
 
-		if (diff < -EARLY_LATE_WINDOW) {
-			note.failLongNote();
-			activeLongNotes.remove(lane);
-			return Judgement.MISS;
-		}
-
-		note.finishLongNote();
+		note.failLongNote();
 		activeLongNotes.remove(lane);
-		return Judgement.PERFECT;
+		return Judgement.MISS;
 	}
 
 	private Judgement finalizeJudgement(Note note, List<Note> notes, Judgement judgement) {
@@ -324,6 +327,7 @@ public class NoteManager {
 				return false;
 			}
 		}
+
 		return true;
 	}
 
@@ -331,7 +335,7 @@ public class NoteManager {
 		int count = 0;
 
 		for (Note note : activeLongNotes.values()) {
-			count += note.isLongNote() ? 1 : 1;
+			count += 1;
 		}
 
 		for (Lane lane : context.getPlayableLanes()) {

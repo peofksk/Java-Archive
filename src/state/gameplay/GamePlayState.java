@@ -158,8 +158,6 @@ public class GamePlayState implements GameState {
 			resultRequested = true;
 			context.changeState(new ResultState(context, buildGameResult()));
 		}
-		
-		
 	}
 
 	@Override
@@ -289,6 +287,7 @@ public class GamePlayState implements GameState {
 
 	private void drawLongNote(Graphics2D g, int laneX, int laneWidth, Note note, boolean active, double gameTime) {
 		double headTime = active ? Math.max(note.getHitTime(), gameTime) : note.getHitTime();
+
 		int headY = (int) Math.round(JUDGEMENT_LINE_Y - (headTime - gameTime) * NOTE_SCROLL_SPEED);
 		int tailY = (int) Math.round(JUDGEMENT_LINE_Y - (note.getEndTime() - gameTime) * NOTE_SCROLL_SPEED);
 
@@ -416,6 +415,10 @@ public class GamePlayState implements GameState {
 	}
 
 	private void pauseGame() {
+		if (paused) {
+			return;
+		}
+
 		paused = true;
 		pauseStartNano = System.nanoTime();
 
@@ -425,11 +428,16 @@ public class GamePlayState implements GameState {
 	}
 
 	private void resumeGame() {
+		if (!paused) {
+			return;
+		}
+
 		long now = System.nanoTime();
 		long pausedDuration = now - pauseStartNano;
 
 		songStartNano += pausedDuration;
 		paused = false;
+		pauseStartNano = 0L;
 
 		if (context.bgm.isPaused()) {
 			context.bgm.resume();
@@ -593,8 +601,14 @@ public class GamePlayState implements GameState {
 		g2.fillRect(x, 0, laneWidth, laneHeight);
 
 		g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
-		g2.setPaint(new GradientPaint(x + laneWidth / 2f, 0f, new Color(235, 250, 255), x + laneWidth / 2f, laneHeight,
-				new Color(90, 200, 255)));
+		g2.setPaint(new GradientPaint(
+				x + laneWidth / 2f,
+				0f,
+				new Color(235, 250, 255),
+				x + laneWidth / 2f,
+				laneHeight,
+				new Color(90, 200, 255)
+		));
 		g2.fillRect(x + 8, 0, Math.max(0, laneWidth - 16), laneHeight);
 
 		g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
@@ -618,8 +632,16 @@ public class GamePlayState implements GameState {
 				int laneWidth = layout.getLaneWidth(lane);
 				String keyText = context.getKeyTextForLane(lane);
 
-				RenderUtils.drawOutlinedCenteredString(g2, keyText, laneX, textY, laneWidth, textHeight, Color.WHITE,
-						new Color(0, 0, 0, 180));
+				RenderUtils.drawOutlinedCenteredString(
+						g2,
+						keyText,
+						laneX,
+						textY,
+						laneWidth,
+						textHeight,
+						Color.WHITE,
+						new Color(0, 0, 0, 180)
+				);
 			}
 		} finally {
 			g2.dispose();
