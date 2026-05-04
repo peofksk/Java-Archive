@@ -1,3 +1,4 @@
+/******************************
 package state;
 
 import java.awt.AlphaComposite;
@@ -729,3 +730,4 @@ public class CorrectionState implements GameState {
         }
     }
 }
+****************************/

@@ -20,11 +20,6 @@
 /introBackground.jpg
 /introMusic.wav
 /judgementLine.png
-/app/
-/asset/
-/audio/
-/core/
-/editor/
 /judgement_line.png
 /lane.png
 /menuBar.png
@@ -61,6 +56,11 @@
 /sample_operationDotabata.wav
 /sample_unwelcomeSchool.wav
 /selectionBackground.png
+/app/
+/asset/
+/audio/
+/core/
+/editor/
 /stage/
 /state/
 /test.png

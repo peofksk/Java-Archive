@@ -10,6 +10,8 @@ import java.awt.event.KeyEvent;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 import asset.AssetManager;
 import core.GameContext;
@@ -55,16 +57,15 @@ public class GamePlayState implements GameState {
 	private double timelineTime = -LEAD_IN;
 
 	private int score = 0;
-	private int combo = 0;
 	private int maxCombo = 0;
-
+	private int combo = 0;
 	private String lastJudge = "";
 	private float alpha = 0.0f;
 
 	private double accuracy = 100.0;
 	private int totalNoteCount = 1;
 
-	private final EnumMap<Lane, Boolean> lanePressed = new EnumMap<>(Lane.class);
+	private final Map<Lane, Boolean> lanePressed = new HashMap<>();
 	private final EnumMap<Judgement, Integer> judgementCounts = new EnumMap<>(Judgement.class);
 
 	public GamePlayState(GameContext context, Stage stage, Difficulty difficulty) {
@@ -650,7 +651,7 @@ public class GamePlayState implements GameState {
 
 	private void initializeLanePressedMap() {
 		lanePressed.clear();
-		for (Lane lane : Lane.values()) {
+		for (Lane lane : context.getPlayableLanes()) {
 			lanePressed.put(lane, false);
 		}
 	}
@@ -664,7 +665,7 @@ public class GamePlayState implements GameState {
 	}
 
 	private void clearLanePressedStates() {
-		for (Lane lane : Lane.values()) {
+		for (Lane lane : context.getPlayableLanes()) {
 			lanePressed.put(lane, false);
 		}
 	}

@@ -90,6 +90,10 @@ public class LevelSelectState implements GameState {
 				context.changeState(new LoadState(context, "Loading Calibration...", next::preload, () -> next));
 			} else if (e.getKeyCode() == KeyEvent.VK_O) {
 				context.changeState(new OptionState(context));
+			}
+			
+			else if (e.getKeyCode() == KeyEvent.VK_S) {
+				context.changeState(new ShopState(context));
 			} else if (e.getKeyCode() == KeyEvent.VK_LEFT && context.sm.hasPrev()) {
 				context.sm.prev();
 				playSample();

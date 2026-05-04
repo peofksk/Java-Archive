@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -13,7 +13,6 @@ import core.GameContext;
 import stage.Stage;
 
 public class NoteManager {
-
 	private static final double PERFECT_WINDOW = 0.08;
 	private static final double GREAT_WINDOW = 0.10;
 	private static final double GOOD_WINDOW = 0.13;
@@ -22,15 +21,13 @@ public class NoteManager {
 	private static final double HOLD_BREAK_TOLERANCE = 0.10;
 
 	private final GameContext context;
-	private final Map<Lane, List<Note>> laneNotes = new EnumMap<>(Lane.class);
-	private final Map<Lane, Note> activeLongNotes = new EnumMap<>(Lane.class);
+	private final Map<Lane, List<Note>> laneNotes = new LinkedHashMap<>();
+	private final Map<Lane, Note> activeLongNotes = new LinkedHashMap<>();
 	private final List<Judgement> pendingJudgements = new ArrayList<>();
-
 	private final AssetManager am = AssetManager.getInstance();
 
 	private final double bpm;
 	private final double offset;
-
 	private double lastHitTimeDiffSeconds = 0.0;
 
 	public NoteManager(GameContext context, Stage stage) {
@@ -49,6 +46,7 @@ public class NoteManager {
 
 	public void addNote(Note note) {
 		List<Note> notes = laneNotes.get(note.getLane());
+
 		if (notes != null) {
 			notes.add(note);
 		}
@@ -68,8 +66,8 @@ public class NoteManager {
 
 		activeLongNotes.clear();
 		pendingJudgements.clear();
-
 		lastHitTimeDiffSeconds = 0.0;
+
 		double secondsPerBeat = 60.0 / bpm;
 
 		for (String rawLine : lines) {
@@ -78,16 +76,19 @@ public class NoteManager {
 			}
 
 			String line = rawLine.trim();
+
 			if (line.isEmpty() || line.startsWith("#")) {
 				continue;
 			}
 
 			String[] parts = line.split("\\s+");
+
 			if (parts.length < 2) {
 				continue;
 			}
 
 			double startBeat;
+
 			try {
 				startBeat = Double.parseDouble(parts[0]);
 			} catch (NumberFormatException e) {
@@ -111,8 +112,13 @@ public class NoteManager {
 				continue;
 			}
 
-			String laneToken = String.join(" ", java.util.Arrays.copyOfRange(parts, laneTokenStartIndex, parts.length));
-			Lane lane = Lane.fromChartToken(laneToken);
+			String laneToken = String.join(
+					" ",
+					java.util.Arrays.copyOfRange(parts, laneTokenStartIndex, parts.length)
+			);
+
+			Lane lane = context.getKeyMode().fromChartToken(laneToken);
+
 			if (lane == null || !context.isPlayableLane(lane)) {
 				continue;
 			}
@@ -124,7 +130,11 @@ public class NoteManager {
 		}
 
 		for (Lane lane : context.getPlayableLanes()) {
-			laneNotes.get(lane).sort(Comparator.comparingDouble(Note::getHitTime));
+			List<Note> notes = laneNotes.get(lane);
+
+			if (notes != null) {
+				notes.sort(Comparator.comparingDouble(Note::getHitTime));
+			}
 		}
 	}
 
@@ -133,6 +143,7 @@ public class NoteManager {
 
 		for (Lane lane : context.getPlayableLanes()) {
 			List<Note> notes = laneNotes.get(lane);
+
 			if (notes == null) {
 				continue;
 			}
@@ -152,6 +163,7 @@ public class NoteManager {
 
 		for (Lane lane : context.getPlayableLanes()) {
 			Note activeLongNote = activeLongNotes.get(lane);
+
 			if (activeLongNote == null) {
 				continue;
 			}
@@ -205,6 +217,7 @@ public class NoteManager {
 		}
 
 		List<Note> notes = laneNotes.get(lane);
+
 		if (notes == null || notes.isEmpty()) {
 			return Judgement.NONE;
 		}
@@ -212,7 +225,6 @@ public class NoteManager {
 		Note note = notes.get(0);
 		double diff = currentTime - note.getHitTime();
 		lastHitTimeDiffSeconds = diff;
-
 		double absDiff = Math.abs(diff);
 
 		if (absDiff <= PERFECT_WINDOW) {
@@ -236,6 +248,7 @@ public class NoteManager {
 
 	public Judgement judgeLongNoteEnd(Lane lane, double currentTime) {
 		Note note = activeLongNotes.get(lane);
+
 		if (note == null) {
 			return Judgement.NONE;
 		}
@@ -323,6 +336,7 @@ public class NoteManager {
 
 		for (Lane lane : context.getPlayableLanes()) {
 			List<Note> notes = laneNotes.get(lane);
+
 			if (notes != null && !notes.isEmpty()) {
 				return false;
 			}
@@ -340,6 +354,7 @@ public class NoteManager {
 
 		for (Lane lane : context.getPlayableLanes()) {
 			List<Note> notes = laneNotes.get(lane);
+
 			if (notes != null) {
 				for (Note note : notes) {
 					count += note.isLongNote() ? 2 : 1;

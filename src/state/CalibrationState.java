@@ -8,7 +8,8 @@ import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
-import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 
 import asset.AssetManager;
@@ -58,7 +59,7 @@ public class CalibrationState implements GameState {
     private final double musicOffsetSeconds;
     private final double rotationBeats;
 
-    private final EnumMap<Lane, Boolean> lanePressed = new EnumMap<>(Lane.class);
+    private final Map<Lane, Boolean> lanePressed = new HashMap<>();
     private final List<OrbitHitMarker> hitMarkers = new ArrayList<>();
 
     public CalibrationState(GameContext context, CorrectionConfig correctionConfig) {
@@ -425,7 +426,9 @@ public class CalibrationState implements GameState {
             return new Color(120, 220, 255);
         }
 
-        return switch (lane.ordinal() % 4) {
+        int laneIndex = context.getLaneIndex(lane);
+
+        return switch (Math.floorMod(laneIndex, 4)) {
             case 0 -> new Color(255, 120, 120);
             case 1 -> new Color(120, 180, 255);
             case 2 -> new Color(120, 255, 170);
@@ -537,10 +540,11 @@ public class CalibrationState implements GameState {
     }
 
     private void initializeLanePressedMap() {
-        lanePressed.clear();
-        for (Lane lane : Lane.values()) {
-            lanePressed.put(lane, false);
-        }
+    	lanePressed.clear();
+
+    	for (Lane lane : context.getPlayableLanes()) {
+    		lanePressed.put(lane, false);
+    	}
     }
 
     private boolean isLanePressed(Lane lane) {
@@ -552,9 +556,11 @@ public class CalibrationState implements GameState {
     }
 
     private void clearLanePressedStates() {
-        for (Lane lane : Lane.values()) {
-            lanePressed.put(lane, false);
-        }
+    	lanePressed.clear();
+
+    	for (Lane lane : context.getPlayableLanes()) {
+    		lanePressed.put(lane, false);
+    	}
     }
 
     private static class OrbitHitMarker {

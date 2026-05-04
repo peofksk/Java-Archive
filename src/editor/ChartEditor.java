@@ -57,6 +57,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
+import core.GameContext;
 import stage.Difficulty;
 import stage.Stage;
 import stage.StageManager;
@@ -146,7 +147,7 @@ public class ChartEditor extends JFrame {
 		gridCombo.setSelectedItem("0.25");
 
 		JLabel speedLabel = new JLabel("Pixels/Beat:");
-		JTextField speedField = new JTextField("64", 5);
+		JTextField speedField = new JTextField("100", 5);
 
 		panel.add(loadChartButton);
 		panel.add(saveChartButton);
@@ -755,9 +756,10 @@ class LanePanel extends JPanel {
 
 	private static final long serialVersionUID = 1L;
 
+	private final GameContext context = new GameContext();
 	private final ArrayList<NoteData> notes = new ArrayList<>();
-	private final List<Lane> lanes = Collections.unmodifiableList(Arrays.asList(Lane.values()));
-
+	private final List<Lane> lanes = Collections.unmodifiableList(new ArrayList<>(context.getPlayableLanes()));
+	
 	private final int sidebarWidth = 180;
 	private final int minLaneWidth = 64;
 	private final int preferredLaneWidth = 100;
@@ -1007,9 +1009,9 @@ class LanePanel extends JPanel {
 			}
 
 			if (note.isLongNote()) {
-				lines.add(String.format("%.3f %.3f %s", note.beat, note.endBeat, lane.getDisplayName()));
+				lines.add(String.format("%.3f %.3f %s", note.beat, note.endBeat, lane.getChartToken()));
 			} else {
-				lines.add(String.format("%.3f %s", note.beat, lane.getDisplayName()));
+				lines.add(String.format("%.3f %s", note.beat, lane.getChartToken()));
 			}
 		}
 
@@ -1060,7 +1062,7 @@ class LanePanel extends JPanel {
 			}
 
 			String laneToken = String.join(" ", Arrays.copyOfRange(parts, laneTokenStartIndex, parts.length));
-			Lane lane = Lane.fromChartToken(laneToken);
+			Lane lane = context.getKeyMode().fromChartToken(laneToken);
 			int laneIndex = getLaneIndex(lane);
 
 			if (laneIndex < 0) {

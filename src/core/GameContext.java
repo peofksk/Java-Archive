@@ -8,10 +8,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.EnumMap;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -19,6 +17,7 @@ import java.util.Properties;
 import audio.BGMManager;
 import stage.Difficulty;
 import stage.StageManager;
+import state.gameplay.KeyMode;
 import state.gameplay.Lane;
 
 public class GameContext {
@@ -27,7 +26,6 @@ public class GameContext {
 
 	private static final String SETTINGS_DIRECTORY_NAME = ".Java-Archive";
 	private static final String SETTINGS_FILE_NAME = "settings.properties";
-	private static final String PLAYABLE_LANE_SEPARATOR = ",";
 
 	private final Path settingsPath = Paths.get(
 			System.getProperty("user.home"),
@@ -36,17 +34,17 @@ public class GameContext {
 	);
 
 	private GameState currentState;
+	private GamePanel gamePanel;
 	private Difficulty currentDifficulty = Difficulty.Easy;
 	private double GLOBAL_OFFSET = -0.08;
 
-	private final EnumMap<Lane, Integer> laneKeyBindings = new EnumMap<>(Lane.class);
-	private final ArrayList<Lane> playableLanes = new ArrayList<>();
+	private KeyMode keyMode = KeyMode.KEY_4;
+	private final Map<Lane, Integer> laneKeyBindings = new LinkedHashMap<>();
 
 	private final int NOTE_COUNT = 12;
 	private int noteIndex = 0;
 
 	public GameContext() {
-		resetPlayableLanesToDefault();
 		resetLaneKeyBindingsToDefault();
 		loadSettings();
 	}
@@ -55,12 +53,22 @@ public class GameContext {
 		if (currentState != null) {
 			currentState.exit();
 		}
+
 		currentState = next;
+
 		if (currentState != null) {
 			currentState.enter();
 		}
 	}
 
+	public void setGamePanel(GamePanel gamePanel) {
+		this.gamePanel = gamePanel;
+	}
+	
+	public GamePanel getGamePanel() {
+		return gamePanel;
+	}
+	
 	public GameState getCurrentState() {
 		return currentState;
 	}
@@ -115,61 +123,96 @@ public class GameContext {
 		}
 	}
 
-	public void resetPlayableLanesToDefault() {
-		setPlayableLanes(Arrays.asList(Lane.values()));
+	public KeyMode getKeyMode() {
+		return keyMode;
 	}
 
-	public void setPlayableLanes(List<Lane> lanes) {
-		LinkedHashSet<Lane> normalized = new LinkedHashSet<>();
+	public int getKeyCount() {
+		return keyMode.getKeyCount();
+	}
 
-		if (lanes != null) {
-			for (Lane lane : lanes) {
-				if (lane != null) {
-					normalized.add(lane);
-				}
-			}
+	public void setKeyMode(KeyMode keyMode) {
+		if (keyMode == null) {
+			return;
 		}
 
-		if (normalized.isEmpty()) {
-			normalized.addAll(Arrays.asList(Lane.values()));
-		}
-
-		playableLanes.clear();
-		playableLanes.addAll(normalized);
+		this.keyMode = keyMode;
 		ensureLaneKeyBindings();
 	}
 
+	public void setKeyModeByKeyCount(int keyCount) {
+		setKeyMode(KeyMode.fromKeyCount(keyCount));
+	}
+
 	public List<Lane> getPlayableLanes() {
-		return Collections.unmodifiableList(playableLanes);
+		ArrayList<Lane> lanes = new ArrayList<>();
+		Collections.addAll(lanes, keyMode.getLanes());
+		return Collections.unmodifiableList(lanes);
 	}
 
 	public int getLaneCount() {
-		return playableLanes.size();
+		return keyMode.getLanes().length;
 	}
 
 	public boolean isPlayableLane(Lane lane) {
-		return playableLanes.contains(lane);
+		if (lane == null) {
+			return false;
+		}
+
+		for (Lane playableLane : keyMode.getLanes()) {
+			if (playableLane == lane) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	public int getLaneIndex(Lane lane) {
-		return playableLanes.indexOf(lane);
+		if (lane == null) {
+			return -1;
+		}
+
+		Lane[] lanes = keyMode.getLanes();
+		for (int i = 0; i < lanes.length; i++) {
+			if (lanes[i] == lane) {
+				return i;
+			}
+		}
+
+		return -1;
 	}
 
 	public void resetLaneKeyBindingsToDefault() {
 		laneKeyBindings.clear();
-		for (Lane lane : Lane.values()) {
+
+		for (Lane lane : getAllSupportedLanes()) {
 			laneKeyBindings.put(lane, lane.getDefaultKeyCode());
 		}
 	}
 
 	private void ensureLaneKeyBindings() {
-		for (Lane lane : Lane.values()) {
+		for (Lane lane : getAllSupportedLanes()) {
 			laneKeyBindings.putIfAbsent(lane, lane.getDefaultKeyCode());
 		}
 	}
 
+	private List<Lane> getAllSupportedLanes() {
+		ArrayList<Lane> lanes = new ArrayList<>();
+
+		for (KeyMode mode : KeyMode.values()) {
+			Collections.addAll(lanes, mode.getLanes());
+		}
+
+		return lanes;
+	}
+
 	public void setLaneKeyBinding(Lane lane, int keyCode) {
 		if (lane == null || keyCode == KeyEvent.VK_UNDEFINED) {
+			return;
+		}
+
+		if (!isPlayableLane(lane)) {
 			return;
 		}
 
@@ -199,12 +242,14 @@ public class GameContext {
 	public Lane getLaneForKeyCode(int keyCode) {
 		ensureLaneKeyBindings();
 
-		for (Lane lane : playableLanes) {
+		for (Lane lane : keyMode.getLanes()) {
 			Integer boundKeyCode = laneKeyBindings.get(lane);
+
 			if (boundKeyCode != null && boundKeyCode == keyCode) {
 				return lane;
 			}
 		}
+
 		return null;
 	}
 
@@ -214,10 +259,13 @@ public class GameContext {
 
 	public Map<Lane, Integer> getLaneKeyBindings() {
 		ensureLaneKeyBindings();
-		EnumMap<Lane, Integer> copy = new EnumMap<>(Lane.class);
-		for (Lane lane : playableLanes) {
+
+		LinkedHashMap<Lane, Integer> copy = new LinkedHashMap<>();
+
+		for (Lane lane : keyMode.getLanes()) {
 			copy.put(lane, laneKeyBindings.get(lane));
 		}
+
 		return Collections.unmodifiableMap(copy);
 	}
 
@@ -229,17 +277,22 @@ public class GameContext {
 		props.setProperty("globalOffset", Double.toString(GLOBAL_OFFSET));
 		props.setProperty("noteIndex", Integer.toString(noteIndex));
 		props.setProperty("currentDifficulty", currentDifficulty.name());
-		props.setProperty("playableLanes", encodePlayableLanes());
+		props.setProperty("keyMode", keyMode.name());
+		props.setProperty("keyCount", Integer.toString(keyMode.getKeyCount()));
 
-		for (Lane lane : Lane.values()) {
-			Integer keyCode = laneKeyBindings.get(lane);
-			if (keyCode != null && keyCode != KeyEvent.VK_UNDEFINED) {
-				props.setProperty("key." + lane.name(), Integer.toString(keyCode));
+		for (KeyMode mode : KeyMode.values()) {
+			for (Lane lane : mode.getLanes()) {
+				Integer keyCode = laneKeyBindings.get(lane);
+
+				if (keyCode != null && keyCode != KeyEvent.VK_UNDEFINED) {
+					props.setProperty(getKeyBindingPropertyName(mode, lane), Integer.toString(keyCode));
+				}
 			}
 		}
 
 		try {
 			Path parent = settingsPath.getParent();
+
 			if (parent != null) {
 				Files.createDirectories(parent);
 			}
@@ -271,75 +324,65 @@ public class GameContext {
 		GLOBAL_OFFSET = readDouble(props, "globalOffset", GLOBAL_OFFSET);
 		setNoteIndex(readInt(props, "noteIndex", noteIndex));
 		currentDifficulty = readDifficulty(props, "currentDifficulty", currentDifficulty);
+		keyMode = readKeyMode(props, keyMode);
 
-		List<Lane> loadedPlayableLanes = readPlayableLanes(props, "playableLanes");
-		if (!loadedPlayableLanes.isEmpty()) {
-			setPlayableLanes(loadedPlayableLanes);
-		}
+		ensureLaneKeyBindings();
 
-		for (Lane lane : Lane.values()) {
-			String value = props.getProperty("key." + lane.name());
-			if (value == null) {
-				continue;
-			}
+		for (KeyMode mode : KeyMode.values()) {
+			for (Lane lane : mode.getLanes()) {
+				String value = props.getProperty(getKeyBindingPropertyName(mode, lane));
 
-			try {
-				int keyCode = Integer.parseInt(value.trim());
-				if (keyCode != KeyEvent.VK_UNDEFINED) {
-					laneKeyBindings.put(lane, keyCode);
+				if (value == null) {
+					value = props.getProperty("key." + lane.getChartToken());
 				}
-			} catch (NumberFormatException e) {
-				System.err.println("Invalid key code for " + lane.name() + ": " + value);
+
+				if (value == null) {
+					continue;
+				}
+
+				try {
+					int keyCode = Integer.parseInt(value.trim());
+
+					if (keyCode != KeyEvent.VK_UNDEFINED) {
+						laneKeyBindings.put(lane, keyCode);
+					}
+				} catch (NumberFormatException e) {
+					System.err.println("Invalid key code for " + lane.getChartToken() + ": " + value);
+				}
 			}
 		}
 
 		ensureLaneKeyBindings();
 	}
 
-	private String encodePlayableLanes() {
-		StringBuilder builder = new StringBuilder();
-
-		for (Lane lane : playableLanes) {
-			if (builder.length() > 0) {
-				builder.append(PLAYABLE_LANE_SEPARATOR);
-			}
-			builder.append(lane.name());
-		}
-
-		return builder.toString();
+	private String getKeyBindingPropertyName(KeyMode mode, Lane lane) {
+		return "key." + mode.getKeyCount() + "." + lane.getChartToken();
 	}
 
-	private List<Lane> readPlayableLanes(Properties props, String key) {
-		String value = props.getProperty(key);
-		if (value == null || value.trim().isEmpty()) {
-			return Collections.emptyList();
-		}
+	private KeyMode readKeyMode(Properties props, KeyMode fallback) {
+		String keyModeName = props.getProperty("keyMode");
 
-		ArrayList<Lane> lanes = new ArrayList<>();
-		String[] tokens = value.split(PLAYABLE_LANE_SEPARATOR);
-
-		for (String token : tokens) {
-			if (token == null) {
-				continue;
-			}
-
-			String laneName = token.trim();
-			if (laneName.isEmpty()) {
-				continue;
-			}
-
+		if (keyModeName != null && !keyModeName.trim().isEmpty()) {
 			try {
-				lanes.add(Lane.valueOf(laneName));
+				return KeyMode.valueOf(keyModeName.trim());
 			} catch (IllegalArgumentException e) {
-				System.err.println("Invalid playable lane in settings: " + laneName);
+				System.err.println("Invalid key mode: " + keyModeName);
 			}
 		}
 
-		return lanes;
+		int keyCount = readInt(props, "keyCount", fallback.getKeyCount());
+
+		try {
+			return KeyMode.fromKeyCount(keyCount);
+		} catch (IllegalArgumentException e) {
+			System.err.println("Invalid key count: " + keyCount);
+			return fallback;
+		}
 	}
 
 	private Difficulty readDifficulty(Properties props, String key, Difficulty fallback) {
 		String value = props.getProperty(key);
+
 		if (value == null || value.trim().isEmpty()) {
 			return fallback;
 		}
@@ -354,6 +397,7 @@ public class GameContext {
 
 	private double readDouble(Properties props, String key, double fallback) {
 		String value = props.getProperty(key);
+
 		if (value == null || value.trim().isEmpty()) {
 			return fallback;
 		}
@@ -368,6 +412,7 @@ public class GameContext {
 
 	private int readInt(Properties props, String key, int fallback) {
 		String value = props.getProperty(key);
+
 		if (value == null || value.trim().isEmpty()) {
 			return fallback;
 		}

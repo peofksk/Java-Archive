@@ -15,6 +15,8 @@ public class GamePanel extends JPanel implements KeyListener {
 
     public GamePanel(GameContext context) {
         this.context = context;
+        this.context.setGamePanel(this);
+        setLayout(null);
         setFocusable(true);
         addKeyListener(this);
     }
