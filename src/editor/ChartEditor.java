@@ -29,7 +29,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
@@ -57,10 +56,10 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
-import core.GameContext;
 import stage.Difficulty;
 import stage.Stage;
 import stage.StageManager;
+import state.gameplay.KeyMode;
 import state.gameplay.Lane;
 
 public class ChartEditor extends JFrame {
@@ -76,6 +75,7 @@ public class ChartEditor extends JFrame {
 
 	private JComboBox<StagePreset> stageCombo;
 	private JComboBox<Difficulty> difficultyCombo;
+	private JComboBox<KeyMode> keyModeCombo;
 
 	private JTextField bpmField;
 	private JTextField offsetField;
@@ -88,7 +88,7 @@ public class ChartEditor extends JFrame {
 
 	public ChartEditor() {
 		setTitle("Rhythm Chart Editor");
-		setSize(1180, 820);
+		setSize(1180, 860);
 		setDefaultCloseOperation(EXIT_ON_CLOSE);
 		setLayout(new BorderLayout());
 
@@ -115,7 +115,10 @@ public class ChartEditor extends JFrame {
 
 	private JPanel createTopPanel() {
 		JPanel wrapper = new JPanel(new BorderLayout());
-		JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+
+		JPanel controlsWrapper = new JPanel(new BorderLayout());
+		JPanel topRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+		JPanel bottomRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
 
 		JButton loadChartButton = new JButton("Load Chart File");
 		JButton saveChartButton = new JButton("Save Chart As");
@@ -124,6 +127,8 @@ public class ChartEditor extends JFrame {
 
 		stageCombo = new JComboBox<>();
 		difficultyCombo = new JComboBox<>();
+		keyModeCombo = new JComboBox<>();
+
 		JButton reloadPresetButton = new JButton("Reload Preset");
 
 		JButton playButton = new JButton("Play");
@@ -149,44 +154,48 @@ public class ChartEditor extends JFrame {
 		JLabel speedLabel = new JLabel("Pixels/Beat:");
 		JTextField speedField = new JTextField("100", 5);
 
-		panel.add(loadChartButton);
-		panel.add(saveChartButton);
-		panel.add(overwritePresetButton);
-		panel.add(clearButton);
-		panel.add(Box.createHorizontalStrut(12));
+		topRow.add(loadChartButton);
+		topRow.add(saveChartButton);
+		topRow.add(overwritePresetButton);
+		topRow.add(clearButton);
+		topRow.add(Box.createHorizontalStrut(10));
 
-		panel.add(new JLabel("Stage:"));
-		panel.add(stageCombo);
-		panel.add(new JLabel("Difficulty:"));
-		panel.add(difficultyCombo);
-		panel.add(reloadPresetButton);
-		panel.add(Box.createHorizontalStrut(12));
+		topRow.add(new JLabel("Stage:"));
+		topRow.add(stageCombo);
+		topRow.add(new JLabel("Difficulty:"));
+		topRow.add(difficultyCombo);
+		topRow.add(new JLabel("Key:"));
+		topRow.add(keyModeCombo);
+		topRow.add(reloadPresetButton);
+		topRow.add(Box.createHorizontalStrut(10));
 
-		panel.add(playButton);
-		panel.add(stopButton);
-		panel.add(exitButton);
-		panel.add(Box.createHorizontalStrut(12));
+		topRow.add(playButton);
+		topRow.add(stopButton);
+		topRow.add(exitButton);
 
-		panel.add(bpmLabel);
-		panel.add(bpmField);
-		panel.add(offsetLabel);
-		panel.add(offsetField);
-		panel.add(startBeatLabel);
-		panel.add(startBeatField);
-		panel.add(useScrollButton);
-		panel.add(Box.createHorizontalStrut(12));
+		bottomRow.add(bpmLabel);
+		bottomRow.add(bpmField);
+		bottomRow.add(offsetLabel);
+		bottomRow.add(offsetField);
+		bottomRow.add(startBeatLabel);
+		bottomRow.add(startBeatField);
+		bottomRow.add(useScrollButton);
+		bottomRow.add(Box.createHorizontalStrut(10));
 
-		panel.add(gridLabel);
-		panel.add(gridCombo);
-		panel.add(Box.createHorizontalStrut(10));
+		bottomRow.add(gridLabel);
+		bottomRow.add(gridCombo);
+		bottomRow.add(Box.createHorizontalStrut(10));
 
-		panel.add(speedLabel);
-		panel.add(speedField);
+		bottomRow.add(speedLabel);
+		bottomRow.add(speedField);
 
 		musicLabel = new JLabel("No preset loaded");
 		musicLabel.setBorder(BorderFactory.createEmptyBorder(0, 10, 6, 10));
 
-		wrapper.add(panel, BorderLayout.NORTH);
+		controlsWrapper.add(topRow, BorderLayout.NORTH);
+		controlsWrapper.add(bottomRow, BorderLayout.SOUTH);
+
+		wrapper.add(controlsWrapper, BorderLayout.NORTH);
 		wrapper.add(musicLabel, BorderLayout.SOUTH);
 
 		loadChartButton.addActionListener(e -> importChartFromFile());
@@ -211,7 +220,9 @@ public class ChartEditor extends JFrame {
 			if (updatingPresetSelectors) {
 				return;
 			}
-			refreshDifficultyCombo(getSelectedPreset(), null);
+
+			Difficulty selectedDifficulty = getSelectedDifficulty();
+			refreshDifficultyCombo(getSelectedPreset(), selectedDifficulty);
 			loadSelectedPreset();
 		});
 
@@ -219,6 +230,21 @@ public class ChartEditor extends JFrame {
 			if (updatingPresetSelectors) {
 				return;
 			}
+
+			loadSelectedPreset();
+		});
+
+		keyModeCombo.addActionListener(e -> {
+			if (updatingPresetSelectors) {
+				return;
+			}
+
+			KeyMode selectedKeyMode = getSelectedKeyMode();
+			if (selectedKeyMode != null) {
+				lanePanel.setKeyMode(selectedKeyMode);
+			}
+
+			refreshDifficultyCombo(getSelectedPreset(), getSelectedDifficulty());
 			loadSelectedPreset();
 		});
 
@@ -286,19 +312,19 @@ public class ChartEditor extends JFrame {
 			}
 
 			for (Difficulty difficulty : Difficulty.values()) {
-				String chartResourcePath = buildChartResourcePath(stage, difficulty);
-				ArrayList<String> chartLines = readTextResource(chartResourcePath);
+				for (KeyMode keyMode : KeyMode.values()) {
+					String chartResourcePath = buildChartResourcePath(stage, difficulty, keyMode);
+					ArrayList<String> chartLines = readTextResource(chartResourcePath);
 
-				if (chartLines != null) {
-					String chartCacheKey = buildChartCacheKey(stage, difficulty);
-					preloadedCharts.put(chartCacheKey, chartLines);
-					preset.addAvailableDifficulty(difficulty);
+					if (chartLines != null) {
+						String chartCacheKey = buildChartCacheKey(stage, difficulty, keyMode);
+						preloadedCharts.put(chartCacheKey, chartLines);
+						preset.addAvailableChart(difficulty, keyMode);
+					}
 				}
 			}
 
-			if (preset.hasAnyDifficulty()) {
-				presetMap.put(stage.getLevelName(), preset);
-			}
+			presetMap.put(stage.getLevelName(), preset);
 		}
 	}
 
@@ -319,21 +345,32 @@ public class ChartEditor extends JFrame {
 
 	private void initializePresetSelection() {
 		updatingPresetSelectors = true;
+
 		stageCombo.removeAllItems();
+		difficultyCombo.removeAllItems();
+		keyModeCombo.removeAllItems();
 
 		for (StagePreset preset : presetMap.values()) {
 			stageCombo.addItem(preset);
 		}
 
+		for (KeyMode keyMode : KeyMode.values()) {
+			keyModeCombo.addItem(keyMode);
+		}
+
 		updatingPresetSelectors = false;
 
 		if (stageCombo.getItemCount() == 0) {
-			musicLabel.setText("프리로드 가능한 레벨 채보가 없습니다.");
+			musicLabel.setText("프리로드 가능한 레벨이 없습니다.");
 			difficultyCombo.setEnabled(false);
+			keyModeCombo.setEnabled(false);
 			return;
 		}
 
 		stageCombo.setSelectedIndex(0);
+		keyModeCombo.setSelectedItem(KeyMode.KEY_4);
+
+		lanePanel.setKeyMode(KeyMode.KEY_4);
 		refreshDifficultyCombo(getSelectedPreset(), Difficulty.Easy);
 		loadSelectedPreset();
 	}
@@ -344,17 +381,29 @@ public class ChartEditor extends JFrame {
 
 		if (preset != null) {
 			for (Difficulty difficulty : Difficulty.values()) {
-				if (preset.hasDifficulty(difficulty)) {
-					difficultyCombo.addItem(difficulty);
-				}
+				difficultyCombo.addItem(difficulty);
 			}
 		}
 
 		if (difficultyCombo.getItemCount() > 0) {
 			Difficulty toSelect = preferredDifficulty;
-			if (toSelect == null || !preset.hasDifficulty(toSelect)) {
-				toSelect = (Difficulty) difficultyCombo.getItemAt(0);
+
+			if (toSelect == null) {
+				toSelect = Difficulty.Easy;
 			}
+
+			boolean found = false;
+			for (int i = 0; i < difficultyCombo.getItemCount(); i++) {
+				if (difficultyCombo.getItemAt(i) == toSelect) {
+					found = true;
+					break;
+				}
+			}
+
+			if (!found) {
+				toSelect = difficultyCombo.getItemAt(0);
+			}
+
 			difficultyCombo.setSelectedItem(toSelect);
 			difficultyCombo.setEnabled(true);
 		} else {
@@ -367,18 +416,21 @@ public class ChartEditor extends JFrame {
 	private void loadSelectedPreset() {
 		StagePreset preset = getSelectedPreset();
 		Difficulty difficulty = getSelectedDifficulty();
+		KeyMode keyMode = getSelectedKeyMode();
 
-		if (preset == null || difficulty == null) {
+		if (preset == null || difficulty == null || keyMode == null) {
 			return;
 		}
 
 		stopAudio();
 		closeAudio();
 
+		lanePanel.setKeyMode(keyMode);
+
 		bpmField.setText(formatDouble(preset.stage.getMusicBPM()));
 		offsetField.setText(formatDouble(preset.stage.getMusicOffsetSeconds()));
 
-		ArrayList<String> chartLines = preloadedCharts.get(buildChartCacheKey(preset.stage, difficulty));
+		ArrayList<String> chartLines = preloadedCharts.get(buildChartCacheKey(preset.stage, difficulty, keyMode));
 		if (chartLines != null) {
 			lanePanel.loadChartLines(chartLines);
 		} else {
@@ -422,14 +474,15 @@ public class ChartEditor extends JFrame {
 	private void overwriteSelectedPresetChart() {
 		StagePreset preset = getSelectedPreset();
 		Difficulty difficulty = getSelectedDifficulty();
+		KeyMode keyMode = getSelectedKeyMode();
 
-		if (preset == null || difficulty == null) {
+		if (preset == null || difficulty == null || keyMode == null) {
 			JOptionPane.showMessageDialog(this, "선택된 프리셋이 없습니다.", "Info", JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
 
-		String fileName = buildChartFileName(preset.stage, difficulty);
-		Path targetPath = resolveWritableChartPath(preset.stage, difficulty);
+		String fileName = buildChartFileName(preset.stage, difficulty, keyMode);
+		Path targetPath = resolveWritableChartPath(preset.stage, difficulty, keyMode);
 
 		if (targetPath == null) {
 			JOptionPane.showMessageDialog(this,
@@ -447,7 +500,11 @@ public class ChartEditor extends JFrame {
 			}
 
 			Files.write(targetPath, lines, StandardCharsets.UTF_8);
-			preloadedCharts.put(buildChartCacheKey(preset.stage, difficulty), new ArrayList<>(lines));
+
+			String chartCacheKey = buildChartCacheKey(preset.stage, difficulty, keyMode);
+			preloadedCharts.put(chartCacheKey, new ArrayList<>(lines));
+			preset.addAvailableChart(difficulty, keyMode);
+
 			updatePresetStatusLabel();
 
 			JOptionPane.showMessageDialog(this, "프리셋 원본 채보에 바로 저장했습니다.\n" + targetPath.toAbsolutePath(), "Saved",
@@ -458,9 +515,9 @@ public class ChartEditor extends JFrame {
 		}
 	}
 
-	private Path resolveWritableChartPath(Stage stage, Difficulty difficulty) {
-		String resourcePath = buildChartResourcePath(stage, difficulty);
-		String fileName = buildChartFileName(stage, difficulty);
+	private Path resolveWritableChartPath(Stage stage, Difficulty difficulty, KeyMode keyMode) {
+		String resourcePath = buildChartResourcePath(stage, difficulty, keyMode);
+		String fileName = buildChartFileName(stage, difficulty, keyMode);
 
 		ArrayList<Path> candidates = new ArrayList<>();
 		candidates.add(Paths.get("asset", fileName));
@@ -476,6 +533,7 @@ public class ChartEditor extends JFrame {
 			if (Files.exists(normalized)) {
 				return normalized;
 			}
+
 			if (parent != null && Files.exists(parent) && Files.isDirectory(parent)) {
 				return normalized;
 			}
@@ -600,29 +658,34 @@ public class ChartEditor extends JFrame {
 	private void updatePresetStatusLabel() {
 		StagePreset preset = getSelectedPreset();
 		Difficulty difficulty = getSelectedDifficulty();
+		KeyMode keyMode = getSelectedKeyMode();
 
-		if (preset == null || difficulty == null) {
+		if (preset == null || difficulty == null || keyMode == null) {
 			musicLabel.setText("No preset loaded");
 			return;
 		}
 
+		boolean chartExists = preset.hasChart(difficulty, keyMode);
+		String chartStatus = chartExists ? "loaded" : "new/empty";
 		String musicStatus = audioClip != null ? String.format("%.3f s", getClipLengthSeconds()) : "missing";
+
 		musicLabel.setText(String.format(
-				"Preset: %s / %s | BPM: %s | Offset: %s s | Notes: %d | Lanes: %d | Music: %s | Ctrl+S: overwrite",
-				preset.stage.getLevelName(), difficulty.name(), formatDouble(parseBpm()),
-				formatDouble(parseOffsetSeconds()), lanePanel.getNoteCount(), lanePanel.getLaneCount(), musicStatus));
+				"Preset: %s / %s / %dK | Chart: %s | BPM: %s | Offset: %s s | Notes: %d | Lanes: %d | Music: %s | Ctrl+S: overwrite",
+				preset.stage.getLevelName(), difficulty.name(), keyMode.getKeyCount(), chartStatus,
+				formatDouble(parseBpm()), formatDouble(parseOffsetSeconds()), lanePanel.getNoteCount(),
+				lanePanel.getLaneCount(), musicStatus));
 	}
 
-	private String buildChartResourcePath(Stage stage, Difficulty difficulty) {
-		return "/" + buildChartFileName(stage, difficulty);
+	private String buildChartResourcePath(Stage stage, Difficulty difficulty, KeyMode keyMode) {
+		return "/" + buildChartFileName(stage, difficulty, keyMode);
 	}
 
-	private String buildChartFileName(Stage stage, Difficulty difficulty) {
-		return stage.getLevelName() + "_" + difficulty.name() + ".txt";
+	private String buildChartFileName(Stage stage, Difficulty difficulty, KeyMode keyMode) {
+		return stage.getLevelName() + "_" + difficulty.name() + "_" + keyMode.getKeyCount() + "K.txt";
 	}
 
-	private String buildChartCacheKey(Stage stage, Difficulty difficulty) {
-		return stage.getLevelName() + "::" + difficulty.name();
+	private String buildChartCacheKey(Stage stage, Difficulty difficulty, KeyMode keyMode) {
+		return stage.getLevelName() + "::" + difficulty.name() + "::" + keyMode.getKeyCount() + "K";
 	}
 
 	private byte[] readBinaryResource(String path) {
@@ -677,6 +740,10 @@ public class ChartEditor extends JFrame {
 		return (Difficulty) difficultyCombo.getSelectedItem();
 	}
 
+	private KeyMode getSelectedKeyMode() {
+		return (KeyMode) keyModeCombo.getSelectedItem();
+	}
+
 	private double beatToSeconds(double beat, double bpm, double offsetSeconds) {
 		return beat * (60.0 / bpm) + offsetSeconds;
 	}
@@ -727,22 +794,24 @@ public class ChartEditor extends JFrame {
 
 	private static class StagePreset {
 		private final Stage stage;
-		private final EnumMap<Difficulty, Boolean> availableDifficulties = new EnumMap<>(Difficulty.class);
+		private final Map<KeyMode, EnumMap<Difficulty, Boolean>> availableCharts = new LinkedHashMap<>();
 
 		private StagePreset(Stage stage) {
 			this.stage = stage;
 		}
 
-		private void addAvailableDifficulty(Difficulty difficulty) {
-			availableDifficulties.put(difficulty, true);
+		private void addAvailableChart(Difficulty difficulty, KeyMode keyMode) {
+			availableCharts.computeIfAbsent(keyMode, unused -> new EnumMap<>(Difficulty.class)).put(difficulty, true);
 		}
 
-		private boolean hasDifficulty(Difficulty difficulty) {
-			return availableDifficulties.getOrDefault(difficulty, false);
-		}
+		private boolean hasChart(Difficulty difficulty, KeyMode keyMode) {
+			EnumMap<Difficulty, Boolean> difficulties = availableCharts.get(keyMode);
 
-		private boolean hasAnyDifficulty() {
-			return !availableDifficulties.isEmpty();
+			if (difficulties == null) {
+				return false;
+			}
+
+			return difficulties.getOrDefault(difficulty, false);
 		}
 
 		@Override
@@ -756,10 +825,11 @@ class LanePanel extends JPanel {
 
 	private static final long serialVersionUID = 1L;
 
-	private final GameContext context = new GameContext();
 	private final ArrayList<NoteData> notes = new ArrayList<>();
-	private final List<Lane> lanes = Collections.unmodifiableList(new ArrayList<>(context.getPlayableLanes()));
-	
+
+	private KeyMode keyMode = KeyMode.KEY_4;
+	private List<Lane> lanes = new ArrayList<>(Arrays.asList(KeyMode.KEY_4.getLanes()));
+
 	private final int sidebarWidth = 180;
 	private final int minLaneWidth = 64;
 	private final int preferredLaneWidth = 100;
@@ -805,6 +875,23 @@ class LanePanel extends JPanel {
 
 			repaint();
 		});
+	}
+
+	public void setKeyMode(KeyMode keyMode) {
+		if (keyMode == null) {
+			return;
+		}
+
+		if (this.keyMode == keyMode) {
+			return;
+		}
+
+		this.keyMode = keyMode;
+		this.lanes = new ArrayList<>(Arrays.asList(keyMode.getLanes()));
+
+		notes.removeIf(note -> note.laneIndex < 0 || note.laneIndex >= lanes.size());
+		clearPendingLongAnchor();
+		repaint();
 	}
 
 	private void toggleTapNoteByMouse(MouseEvent e) {
@@ -1032,7 +1119,7 @@ class LanePanel extends JPanel {
 				continue;
 			}
 
-			String[] parts = line.split("\s+");
+			String[] parts = line.split("\\s+");
 			if (parts.length < 2) {
 				continue;
 			}
@@ -1062,7 +1149,7 @@ class LanePanel extends JPanel {
 			}
 
 			String laneToken = String.join(" ", Arrays.copyOfRange(parts, laneTokenStartIndex, parts.length));
-			Lane lane = context.getKeyMode().fromChartToken(laneToken);
+			Lane lane = keyMode.fromChartToken(laneToken);
 			int laneIndex = getLaneIndex(lane);
 
 			if (laneIndex < 0) {
@@ -1288,11 +1375,12 @@ class LanePanel extends JPanel {
 		g.drawString(String.format("Scroll: %.3f beat", scrollOffsetBeats), 10, 20);
 		g.drawString(String.format("Grid: %.3f beat", gridInterval), 10, 40);
 		g.drawString(String.format("Cursor: %.3f beat", playbackBeat), 10, 60);
-		g.drawString(String.format("Lanes: %d", lanes.size()), 10, 80);
-		g.drawString("Left Click: Add/Remove Tap", 10, 110);
-		g.drawString("Shift + Left Click x2: Create Long Note", 10, 130);
-		g.drawString("Right Click: Remove Note", 10, 150);
-		g.drawString("Mouse Wheel: Scroll", 10, 170);
+		g.drawString(String.format("Key Mode: %dK", keyMode.getKeyCount()), 10, 80);
+		g.drawString(String.format("Lanes: %d", lanes.size()), 10, 100);
+		g.drawString("Left Click: Add/Remove Tap", 10, 130);
+		g.drawString("Shift + Left Click x2: Create Long Note", 10, 150);
+		g.drawString("Right Click: Remove Note", 10, 170);
+		g.drawString("Mouse Wheel: Scroll", 10, 190);
 	}
 
 	public void saveChart(File file) {

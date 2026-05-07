@@ -13,6 +13,7 @@ import core.GameContext;
 import stage.Stage;
 
 public class NoteManager {
+
 	private static final double PERFECT_WINDOW = 0.08;
 	private static final double GREAT_WINDOW = 0.10;
 	private static final double GOOD_WINDOW = 0.13;
@@ -28,6 +29,7 @@ public class NoteManager {
 
 	private final double bpm;
 	private final double offset;
+
 	private double lastHitTimeDiffSeconds = 0.0;
 
 	public NoteManager(GameContext context, Stage stage) {
@@ -39,12 +41,22 @@ public class NoteManager {
 		this.bpm = bpm;
 		this.offset = offset;
 
+		initializeLaneNotes();
+	}
+
+	private void initializeLaneNotes() {
+		laneNotes.clear();
+
 		for (Lane lane : context.getPlayableLanes()) {
 			laneNotes.put(lane, new ArrayList<>());
 		}
 	}
 
 	public void addNote(Note note) {
+		if (note == null) {
+			return;
+		}
+
 		List<Note> notes = laneNotes.get(note.getLane());
 
 		if (notes != null) {
@@ -60,13 +72,7 @@ public class NoteManager {
 			return;
 		}
 
-		for (Lane lane : context.getPlayableLanes()) {
-			laneNotes.computeIfAbsent(lane, unused -> new ArrayList<>()).clear();
-		}
-
-		activeLongNotes.clear();
-		pendingJudgements.clear();
-		lastHitTimeDiffSeconds = 0.0;
+		resetChartData();
 
 		double secondsPerBeat = 60.0 / bpm;
 
@@ -129,6 +135,22 @@ public class NoteManager {
 			addNote(new Note(lane, hitTime, endTime));
 		}
 
+		sortNotes();
+	}
+
+	private void resetChartData() {
+		laneNotes.clear();
+
+		for (Lane lane : context.getPlayableLanes()) {
+			laneNotes.put(lane, new ArrayList<>());
+		}
+
+		activeLongNotes.clear();
+		pendingJudgements.clear();
+		lastHitTimeDiffSeconds = 0.0;
+	}
+
+	private void sortNotes() {
 		for (Lane lane : context.getPlayableLanes()) {
 			List<Note> notes = laneNotes.get(lane);
 
@@ -225,6 +247,7 @@ public class NoteManager {
 		Note note = notes.get(0);
 		double diff = currentTime - note.getHitTime();
 		lastHitTimeDiffSeconds = diff;
+
 		double absDiff = Math.abs(diff);
 
 		if (absDiff <= PERFECT_WINDOW) {

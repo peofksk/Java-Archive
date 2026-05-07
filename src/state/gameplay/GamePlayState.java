@@ -9,8 +9,8 @@ import java.awt.Image;
 import java.awt.event.KeyEvent;
 import java.util.Collections;
 import java.util.EnumMap;
-import java.util.List;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import asset.AssetManager;
@@ -25,15 +25,18 @@ public class GamePlayState implements GameState {
 
 	private static final int SCREEN_WIDTH = 1024;
 	private static final int SCREEN_HEIGHT = 576;
+
 	private static final int PLAYFIELD_START_X = 30;
 	private static final int PLAYFIELD_WIDTH = 320;
 	private static final int JUDGEMENT_LINE_Y = 383;
+
 	private static final double LEAD_IN = 3.0;
 	private static final double AUDIO_OUTPUT_LATENCY = 0.2;
 	private static final double NOTE_SCROLL_SPEED = 600.0;
 
 	private final GameContext context;
 	private final AssetManager am = AssetManager.getInstance();
+
 	private final Stage stage;
 	private final Difficulty difficulty;
 
@@ -50,18 +53,17 @@ public class GamePlayState implements GameState {
 
 	private volatile boolean musicThreadStarted = false;
 	private volatile boolean audioStarted = false;
-
 	private volatile long songStartNano = 0L;
-	private long pauseStartNano = 0L;
 
+	private long pauseStartNano = 0L;
 	private double timelineTime = -LEAD_IN;
 
 	private int score = 0;
-	private int maxCombo = 0;
 	private int combo = 0;
+	private int maxCombo = 0;
+
 	private String lastJudge = "";
 	private float alpha = 0.0f;
-
 	private double accuracy = 100.0;
 	private int totalNoteCount = 1;
 
@@ -72,6 +74,7 @@ public class GamePlayState implements GameState {
 		this.context = context;
 		this.stage = stage;
 		this.difficulty = difficulty;
+
 		initializeLanePressedMap();
 		resetJudgementCounts();
 	}
@@ -85,12 +88,9 @@ public class GamePlayState implements GameState {
 		judgementLine = am.getImage("judgement_line");
 		noteImage = am.getImage("note_" + context.getNoteIndex());
 
-		nm = new NoteManager(context, stage.getMusicBPM(), stage.getMusicOffsetSeconds());
-		nm.loadChart("note_" + stage.getLevelName() + "_" + difficulty.name().toLowerCase());
-
-		totalNoteCount = Math.max(1, nm.getRemainingNoteCount());
-
+		loadNoteManager();
 		context.bgm.load(stage.getMusicPath());
+
 		preloaded = true;
 	}
 
@@ -101,16 +101,15 @@ public class GamePlayState implements GameState {
 		if (!preloaded) {
 			preload();
 		} else {
-			nm = new NoteManager(context, stage.getMusicBPM(), stage.getMusicOffsetSeconds());
-			nm.loadChart("note_" + stage.getLevelName() + "_" + difficulty.name().toLowerCase());
-			totalNoteCount = Math.max(1, nm.getRemainingNoteCount());
+			loadNoteManager();
 			context.bgm.load(stage.getMusicPath());
 		}
 
 		long now = System.nanoTime();
-		songStartNano = now + (long) (LEAD_IN * 1_000_000_000L);
 
+		songStartNano = now + (long) (LEAD_IN * 1_000_000_000L);
 		timelineTime = -LEAD_IN;
+
 		musicThreadStarted = false;
 		audioStarted = false;
 		started = true;
@@ -127,7 +126,23 @@ public class GamePlayState implements GameState {
 
 		resetJudgementCounts();
 		clearLanePressedStates();
+
 		startScheduledMusicThread();
+	}
+
+	private void loadNoteManager() {
+		nm = new NoteManager(context, stage.getMusicBPM(), stage.getMusicOffsetSeconds());
+		nm.loadChart(buildChartKey());
+		totalNoteCount = Math.max(1, nm.getRemainingNoteCount());
+	}
+
+	private String buildChartKey() {
+		return stage.getLevelName()
+				+ "_"
+				+ difficulty.name()
+				+ "_"
+				+ context.getKeyCount()
+				+ "K";
 	}
 
 	@Override
@@ -143,9 +158,11 @@ public class GamePlayState implements GameState {
 		}
 
 		updateTimelineTime();
+
 		double gameTime = getGameplayTime();
 
 		int missCountThisFrame = nm.update(gameTime, lanePressed);
+
 		for (int i = 0; i < missCountThisFrame; i++) {
 			applyJudgement(Judgement.MISS);
 		}
@@ -166,6 +183,7 @@ public class GamePlayState implements GameState {
 		LaneLayout layout = getLaneLayout();
 
 		g.drawImage(background, 0, 0, null);
+
 		drawLane(g, layout);
 		drawJudgementLine(g, layout);
 		drawScorePanelBackground(g);
@@ -203,6 +221,7 @@ public class GamePlayState implements GameState {
 			if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
 				resumeGame();
 			}
+
 			return;
 		}
 
@@ -216,10 +235,12 @@ public class GamePlayState implements GameState {
 		}
 
 		Lane inputLane = context.getLaneForKeyCode(e.getKeyCode());
+
 		if (inputLane != null) {
 			if (isLanePressed(inputLane)) {
 				return;
 			}
+
 			setLanePressed(inputLane, true);
 		}
 
@@ -230,6 +251,7 @@ public class GamePlayState implements GameState {
 
 		if (inputLane != null) {
 			result = nm.judge(inputLane, judgeTime);
+
 			if (result == Judgement.NONE && !nm.hasActiveLongNote(inputLane)) {
 				result = Judgement.MISS;
 			}
@@ -241,13 +263,14 @@ public class GamePlayState implements GameState {
 	@Override
 	public void keyReleased(KeyEvent e) {
 		Lane inputLane = context.getLaneForKeyCode(e.getKeyCode());
+
 		if (inputLane == null) {
 			return;
 		}
 
 		updateTimelineTime();
-		double judgeTime = getGameplayTime();
 
+		double judgeTime = getGameplayTime();
 		Judgement result = nm.judgeLongNoteEnd(inputLane, judgeTime);
 
 		setLanePressed(inputLane, false);
@@ -307,6 +330,7 @@ public class GamePlayState implements GameState {
 
 		if (bodyHeight > 0 && bodyBottom >= -drawHeight && bodyTop <= SCREEN_HEIGHT + drawHeight) {
 			Graphics2D g2 = (Graphics2D) g.create();
+
 			try {
 				g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.88f));
 				g2.setColor(new Color(120, 220, 255));
@@ -314,6 +338,7 @@ public class GamePlayState implements GameState {
 
 				g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
 				g2.setColor(Color.WHITE);
+
 				int shineWidth = Math.max(4, bodyWidth / 4);
 				g2.fillRoundRect(bodyX + Math.max(1, bodyWidth / 8), bodyTop, shineWidth, bodyHeight, 10, 10);
 			} finally {
@@ -343,6 +368,7 @@ public class GamePlayState implements GameState {
 		if (noteImage != null && noteImage.getWidth(null) > 0) {
 			return Math.min(noteImage.getWidth(null), Math.max(20, laneWidth - 8));
 		}
+
 		return Math.max(20, laneWidth - 20);
 	}
 
@@ -350,6 +376,7 @@ public class GamePlayState implements GameState {
 		if (noteImage != null && noteImage.getHeight(null) > 0) {
 			return noteImage.getHeight(null);
 		}
+
 		return 16;
 	}
 
@@ -405,7 +432,6 @@ public class GamePlayState implements GameState {
 
 				context.bgm.playLoaded(false);
 				audioStarted = true;
-
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
@@ -453,44 +479,44 @@ public class GamePlayState implements GameState {
 		judgementCounts.put(result, judgementCounts.getOrDefault(result, 0) + 1);
 
 		switch (result) {
-		case MISS -> {
-			score -= 10;
-			combo = 0;
-			lastJudge = "Miss";
-			accuracy -= 100.0 / totalNoteCount;
-		}
-		case LATE -> {
-			score += 5;
-			combo += 1;
-			lastJudge = "Late";
-			accuracy -= (100.0 / totalNoteCount) * 0.08;
-		}
-		case EARLY -> {
-			score += 10;
-			combo += 1;
-			lastJudge = "Early";
-			accuracy -= (100.0 / totalNoteCount) * 0.06;
-		}
-		case GOOD -> {
-			score += 20;
-			combo += 1;
-			lastJudge = "Good";
-			accuracy -= (100.0 / totalNoteCount) * 0.04;
-		}
-		case GREAT -> {
-			score += 30;
-			combo += 1;
-			lastJudge = "Great";
-			accuracy -= (100.0 / totalNoteCount) * 0.02;
-		}
-		case PERFECT -> {
-			score += 50;
-			combo += 1;
-			lastJudge = "Perfect";
-		}
-		case NONE -> {
-			return;
-		}
+			case MISS -> {
+				score -= 10;
+				combo = 0;
+				lastJudge = "Miss";
+				accuracy -= 100.0 / totalNoteCount;
+			}
+			case LATE -> {
+				score += 5;
+				combo += 1;
+				lastJudge = "Late";
+				accuracy -= (100.0 / totalNoteCount) * 0.08;
+			}
+			case EARLY -> {
+				score += 10;
+				combo += 1;
+				lastJudge = "Early";
+				accuracy -= (100.0 / totalNoteCount) * 0.06;
+			}
+			case GOOD -> {
+				score += 20;
+				combo += 1;
+				lastJudge = "Good";
+				accuracy -= (100.0 / totalNoteCount) * 0.04;
+			}
+			case GREAT -> {
+				score += 30;
+				combo += 1;
+				lastJudge = "Great";
+				accuracy -= (100.0 / totalNoteCount) * 0.02;
+			}
+			case PERFECT -> {
+				score += 50;
+				combo += 1;
+				lastJudge = "Perfect";
+			}
+			case NONE -> {
+				return;
+			}
 		}
 
 		if (accuracy < 0) {
@@ -516,9 +542,9 @@ public class GamePlayState implements GameState {
 		g.drawString(String.valueOf(score), 740, 250);
 
 		g.drawString("COMBO : ", 600, 280);
-		g.drawString("MAX COMBO : ", 570, 310);
-
 		g.drawString(String.valueOf(combo), 740, 280);
+
+		g.drawString("MAX COMBO : ", 570, 310);
 		g.drawString(String.valueOf(maxCombo), 740, 310);
 
 		g.drawString("Accuracy : ", 570, 370);
@@ -532,13 +558,14 @@ public class GamePlayState implements GameState {
 		RenderUtils.drawCenteredString(g2, String.valueOf(combo), 30, 270, 320, 120);
 
 		g2.setFont(new Font("Arial", Font.BOLD, 50));
+
 		switch (lastJudge) {
-		case "Perfect" -> g2.setColor(Color.BLUE);
-		case "Great" -> g2.setColor(Color.CYAN);
-		case "Good" -> g2.setColor(Color.GREEN);
-		case "Early", "Late" -> g2.setColor(Color.ORANGE);
-		case "Miss" -> g2.setColor(Color.GRAY);
-		default -> g2.setColor(Color.WHITE);
+			case "Perfect" -> g2.setColor(Color.BLUE);
+			case "Great" -> g2.setColor(Color.CYAN);
+			case "Good" -> g2.setColor(Color.GREEN);
+			case "Early", "Late" -> g2.setColor(Color.ORANGE);
+			case "Miss" -> g2.setColor(Color.GRAY);
+			default -> g2.setColor(Color.WHITE);
 		}
 
 		g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(alpha, 0.25f)));
@@ -570,6 +597,7 @@ public class GamePlayState implements GameState {
 
 	private void drawLane(Graphics2D g, LaneLayout layout) {
 		java.awt.Composite original = g.getComposite();
+
 		g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.5f));
 
 		for (Lane lane : layout.getLanes()) {
@@ -626,6 +654,7 @@ public class GamePlayState implements GameState {
 			int textY = 405;
 			int textHeight = 42;
 			int fontSize = Math.max(16, Math.min(28, layout.getMinLaneWidth() - 18));
+
 			g2.setFont(new Font("Arial", Font.BOLD, fontSize));
 
 			for (Lane lane : layout.getLanes()) {
@@ -651,6 +680,7 @@ public class GamePlayState implements GameState {
 
 	private void initializeLanePressedMap() {
 		lanePressed.clear();
+
 		for (Lane lane : context.getPlayableLanes()) {
 			lanePressed.put(lane, false);
 		}
@@ -665,6 +695,8 @@ public class GamePlayState implements GameState {
 	}
 
 	private void clearLanePressedStates() {
+		lanePressed.clear();
+
 		for (Lane lane : context.getPlayableLanes()) {
 			lanePressed.put(lane, false);
 		}
@@ -672,6 +704,7 @@ public class GamePlayState implements GameState {
 
 	private void resetJudgementCounts() {
 		judgementCounts.clear();
+
 		for (Judgement judgement : Judgement.values()) {
 			if (judgement != Judgement.NONE) {
 				judgementCounts.put(judgement, 0);
