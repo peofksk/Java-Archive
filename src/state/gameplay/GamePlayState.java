@@ -7,6 +7,7 @@ import java.awt.GradientPaint;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.event.KeyEvent;
+import java.awt.image.BufferedImage;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -45,6 +46,7 @@ public class GamePlayState implements GameState {
 	private Image background;
 	private Image judgementLine;
 	private Image noteImage;
+	private Color noteThemeColor = new Color(120, 220, 255);
 
 	private boolean preloaded = false;
 	private boolean started = false;
@@ -86,7 +88,7 @@ public class GamePlayState implements GameState {
 
 		background = am.getImage(stage.getBackgroundImageKey());
 		judgementLine = am.getImage("judgement_line");
-		noteImage = am.getImage("note_" + context.getNoteIndex());
+		loadNoteSkin();
 
 		loadNoteManager();
 		context.bgm.load(stage.getMusicPath());
@@ -101,6 +103,7 @@ public class GamePlayState implements GameState {
 		if (!preloaded) {
 			preload();
 		} else {
+			loadNoteSkin();
 			loadNoteManager();
 			context.bgm.load(stage.getMusicPath());
 		}
@@ -128,6 +131,11 @@ public class GamePlayState implements GameState {
 		clearLanePressedStates();
 
 		startScheduledMusicThread();
+	}
+
+	private void loadNoteSkin() {
+		noteImage = am.getImage("note_" + context.getNoteIndex());
+		noteThemeColor = extractDominantNoteColor(noteImage);
 	}
 
 	private void loadNoteManager() {
@@ -332,12 +340,15 @@ public class GamePlayState implements GameState {
 			Graphics2D g2 = (Graphics2D) g.create();
 
 			try {
+				Color bodyColor = withAlpha(noteThemeColor, 225);
+				Color shineColor = brighten(noteThemeColor, 1.7f, 100);
+
 				g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.88f));
-				g2.setColor(new Color(120, 220, 255));
+				g2.setColor(bodyColor);
 				g2.fillRoundRect(bodyX, bodyTop, bodyWidth, bodyHeight, 12, 12);
 
 				g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
-				g2.setColor(Color.WHITE);
+				g2.setColor(shineColor);
 
 				int shineWidth = Math.max(4, bodyWidth / 4);
 				g2.fillRoundRect(bodyX + Math.max(1, bodyWidth / 8), bodyTop, shineWidth, bodyHeight, 10, 10);
@@ -360,7 +371,7 @@ public class GamePlayState implements GameState {
 			return;
 		}
 
-		g.setColor(Color.CYAN);
+		g.setColor(noteThemeColor);
 		g.fillRoundRect(drawX, y, drawWidth, drawHeight, 10, 10);
 	}
 
@@ -619,29 +630,64 @@ public class GamePlayState implements GameState {
 			g.fillRect(x + laneWidth - 2, 0, 2, layout.getLaneHeight());
 		}
 
+		drawCenterDivider(g, layout);
+
 		g.setComposite(original);
+	}
+
+	private void drawCenterDivider(Graphics2D g, LaneLayout layout) {
+		int laneCount = layout.getLaneCount();
+
+		if (laneCount < 2) {
+			return;
+		}
+
+		int splitIndex = laneCount / 2;
+		int dividerX = layout.getLaneX(splitIndex);
+
+		Color base = noteThemeColor;
+		Color outerGlow = withAlpha(base, 75);
+		Color innerGlow = withAlpha(base, 165);
+		Color core = brighten(base, 1.55f, 230);
+
+		Graphics2D g2 = (Graphics2D) g.create();
+
+		try {
+			g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.95f));
+
+			g2.setColor(outerGlow);
+			g2.fillRect(dividerX - 7, 0, 14, layout.getLaneHeight());
+
+			g2.setColor(innerGlow);
+			g2.fillRect(dividerX - 4, 0, 8, layout.getLaneHeight());
+
+			g2.setColor(core);
+			g2.fillRect(dividerX - 1, 0, 2, layout.getLaneHeight());
+		} finally {
+			g2.dispose();
+		}
 	}
 
 	private void drawLaneGlow(Graphics2D g, int x, int laneWidth, int laneHeight) {
 		Graphics2D g2 = (Graphics2D) g.create();
 
 		g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.30f));
-		g2.setColor(new Color(120, 220, 255));
+		g2.setColor(withAlpha(noteThemeColor, 120));
 		g2.fillRect(x, 0, laneWidth, laneHeight);
 
 		g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
 		g2.setPaint(new GradientPaint(
 				x + laneWidth / 2f,
 				0f,
-				new Color(235, 250, 255),
+				brighten(noteThemeColor, 1.75f, 220),
 				x + laneWidth / 2f,
 				laneHeight,
-				new Color(90, 200, 255)
+				withAlpha(noteThemeColor, 180)
 		));
 		g2.fillRect(x + 8, 0, Math.max(0, laneWidth - 16), laneHeight);
 
 		g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
-		g2.setColor(new Color(220, 245, 255));
+		g2.setColor(brighten(noteThemeColor, 1.9f, 160));
 		g2.fillRect(x + laneWidth / 2 - 10, 0, 20, laneHeight);
 
 		g2.dispose();
@@ -676,6 +722,96 @@ public class GamePlayState implements GameState {
 		} finally {
 			g2.dispose();
 		}
+	}
+
+	private Color extractDominantNoteColor(Image image) {
+		if (image == null) {
+			return new Color(120, 220, 255);
+		}
+
+		int width = image.getWidth(null);
+		int height = image.getHeight(null);
+
+		if (width <= 0 || height <= 0) {
+			return new Color(120, 220, 255);
+		}
+
+		BufferedImage bufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D g2 = bufferedImage.createGraphics();
+
+		try {
+			g2.drawImage(image, 0, 0, null);
+		} finally {
+			g2.dispose();
+		}
+
+		long rSum = 0;
+		long gSum = 0;
+		long bSum = 0;
+		int count = 0;
+
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				int argb = bufferedImage.getRGB(x, y);
+
+				int alpha = (argb >>> 24) & 0xFF;
+				if (alpha < 80) {
+					continue;
+				}
+
+				int r = (argb >>> 16) & 0xFF;
+				int g = (argb >>> 8) & 0xFF;
+				int b = argb & 0xFF;
+
+				int max = Math.max(r, Math.max(g, b));
+				int min = Math.min(r, Math.min(g, b));
+
+				if (max > 235 && min > 220) {
+					continue;
+				}
+
+				if (max < 35) {
+					continue;
+				}
+
+				rSum += r;
+				gSum += g;
+				bSum += b;
+				count++;
+			}
+		}
+
+		if (count == 0) {
+			return new Color(120, 220, 255);
+		}
+
+		return new Color(
+				clampColor((int) (rSum / count)),
+				clampColor((int) (gSum / count)),
+				clampColor((int) (bSum / count))
+		);
+	}
+
+	private Color withAlpha(Color color, int alpha) {
+		return new Color(
+				color.getRed(),
+				color.getGreen(),
+				color.getBlue(),
+				clampColor(alpha)
+		);
+	}
+
+	private Color brighten(Color color, float factor, int alpha) {
+		return new Color(
+				clampColor((int) (color.getRed() * factor)),
+				clampColor((int) (color.getGreen() * factor)),
+				clampColor((int) (color.getBlue() * factor)),
+				clampColor(alpha)
+		);
+	}
+
+	private int clampColor(int value) {
+		return Math.max(0, Math.min(255, value));
 	}
 
 	private void initializeLanePressedMap() {
