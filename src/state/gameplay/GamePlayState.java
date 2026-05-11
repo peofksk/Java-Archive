@@ -33,7 +33,7 @@ public class GamePlayState implements GameState {
 
 	private static final double LEAD_IN = 3.0;
 	private static final double AUDIO_OUTPUT_LATENCY = 0.2;
-	private static final double NOTE_SCROLL_SPEED = 600.0;
+	private static final double NOTE_SCROLL_SPEED = 500.0;
 
 	private final GameContext context;
 	private final AssetManager am = AssetManager.getInstance();
