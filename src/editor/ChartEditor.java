@@ -467,12 +467,15 @@ public class ChartEditor extends JFrame {
 			return;
 		}
 
-		String fileName = buildChartFileName(preset.stage, difficulty, keyMode);
+		String resourcePath = buildChartResourcePath(preset.stage, difficulty, keyMode);
 		Path targetPath = resolveWritableChartPath(preset.stage, difficulty, keyMode);
 
 		if (targetPath == null) {
 			JOptionPane.showMessageDialog(this,
-					"원본 채보 파일 경로를 찾지 못했습니다.\n" + "아래 이름으로 asset 폴더에 파일을 두고 다시 시도하세요:\n" + fileName, "Error",
+					"원본 채보 파일 경로를 찾지 못했습니다.\n"
+							+ "아래 경로에 파일을 두고 다시 시도하세요:\n"
+							+ resourcePath,
+					"Error",
 					JOptionPane.ERROR_MESSAGE);
 			return;
 		}
@@ -493,24 +496,27 @@ public class ChartEditor extends JFrame {
 
 			updatePresetStatusLabel();
 
-			JOptionPane.showMessageDialog(this, "프리셋 원본 채보에 바로 저장했습니다.\n" + targetPath.toAbsolutePath(), "Saved",
+			JOptionPane.showMessageDialog(this,
+					"프리셋 원본 채보에 바로 저장했습니다.\n" + targetPath.toAbsolutePath(),
+					"Saved",
 					JOptionPane.INFORMATION_MESSAGE);
 
 		} catch (Exception e) {
-			JOptionPane.showMessageDialog(this, "프리셋 덮어쓰기 실패: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+			JOptionPane.showMessageDialog(this, "프리셋 덮어쓰기 실패: " + e.getMessage(), "Error",
+					JOptionPane.ERROR_MESSAGE);
 		}
 	}
 
 	private Path resolveWritableChartPath(Stage stage, Difficulty difficulty, KeyMode keyMode) {
 		String resourcePath = buildChartResourcePath(stage, difficulty, keyMode);
-		String fileName = buildChartFileName(stage, difficulty, keyMode);
+		String relativePath = buildChartRelativePath(stage, difficulty, keyMode);
 
 		ArrayList<Path> candidates = new ArrayList<>();
-		candidates.add(Paths.get("asset", fileName));
-		candidates.add(Paths.get("Asset", fileName));
-		candidates.add(Paths.get("src", "asset", fileName));
-		candidates.add(Paths.get("src", "main", "resources", fileName));
-		candidates.add(Paths.get("resources", fileName));
+
+		candidates.add(Paths.get("asset", relativePath));
+		candidates.add(Paths.get("Asset", relativePath));
+		candidates.add(Paths.get("src", "main", "resources", relativePath));
+		candidates.add(Paths.get("resources", relativePath));
 
 		for (Path candidate : candidates) {
 			Path normalized = candidate.toAbsolutePath().normalize();
@@ -656,18 +662,36 @@ public class ChartEditor extends JFrame {
 		String musicStatus = audioClip != null ? String.format("%.3f s", getClipLengthSeconds()) : "missing";
 
 		musicLabel.setText(String.format(
-				"Preset: %s / %s / %dK | Chart: %s | BPM: %s | Offset: %s s | Notes: %d | Lanes: %d | Music: %s | Ctrl+S: overwrite",
-				preset.stage.getLevelName(), difficulty.name(), keyMode.getKeyCount(), chartStatus,
-				formatDouble(parseBpm()), formatDouble(parseOffsetSeconds()), lanePanel.getNoteCount(),
-				lanePanel.getLaneCount(), musicStatus));
+				"Preset: %s / %s / %dK | Chart: %s | Path: %s | BPM: %s | Offset: %s s | Notes: %d | Lanes: %d | Music: %s | Ctrl+S: overwrite",
+				preset.stage.getLevelName(),
+				difficulty.name(),
+				keyMode.getKeyCount(),
+				chartStatus,
+				buildChartResourcePath(preset.stage, difficulty, keyMode),
+				formatDouble(parseBpm()),
+				formatDouble(parseOffsetSeconds()),
+				lanePanel.getNoteCount(),
+				lanePanel.getLaneCount(),
+				musicStatus));
 	}
 
 	private String buildChartResourcePath(Stage stage, Difficulty difficulty, KeyMode keyMode) {
-		return "/" + buildChartFileName(stage, difficulty, keyMode);
+		return "/chart/"
+				+ stage.getLevelName()
+				+ "/"
+				+ buildChartFileName(difficulty, keyMode);
 	}
 
-	private String buildChartFileName(Stage stage, Difficulty difficulty, KeyMode keyMode) {
-		return stage.getLevelName() + "_" + difficulty.name() + "_" + keyMode.getKeyCount() + "K.txt";
+	private String buildChartRelativePath(Stage stage, Difficulty difficulty, KeyMode keyMode) {
+		return Paths.get(
+				"chart",
+				stage.getLevelName(),
+				buildChartFileName(difficulty, keyMode)
+		).toString();
+	}
+
+	private String buildChartFileName(Difficulty difficulty, KeyMode keyMode) {
+		return difficulty.name() + "_" + keyMode.getKeyCount() + "K.txt";
 	}
 
 	private String buildChartCacheKey(Stage stage, Difficulty difficulty, KeyMode keyMode) {

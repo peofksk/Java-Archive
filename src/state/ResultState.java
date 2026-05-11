@@ -34,7 +34,7 @@ public class ResultState implements GameState {
         }
 
         background = am.getImage("result_bg");
-        context.bgm.load("/resultMusic.wav");
+        context.bgm.load("/audio/bgm/resultMusic.wav");
 
         preloaded = true;
     }

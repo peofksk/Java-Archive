@@ -59,7 +59,7 @@ public class LevelSelectState implements GameState {
 
 	@Override
 	public void enter() {
-		background = am.getImage("selection_bg");
+		background = am.getImage("level_selection_bg");
 		arrowLeft = am.getImage("arrow_left");
 		arrowRight = am.getImage("arrow_right");
 		pressEnter = am.getImage("press_enter");

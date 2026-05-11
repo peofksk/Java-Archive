@@ -24,7 +24,7 @@ public class IntroState implements GameState {
 		title = am.getImage("game_title");
 		pressEnter = am.getImage("press_enter");
 
-		context.bgm.play("/introMusic.wav", true);
+		context.bgm.play("/audio/bgm/introMusic.wav", true);
 	}
 
 	@Override

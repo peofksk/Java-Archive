@@ -1,8 +1,15 @@
 package asset;
 
 import stage.Difficulty;
+import state.gameplay.KeyMode;
 
 public class Init {
+
+    private static final String[] STAGE_NAMES = {
+            "unwelcomeSchool",
+            "afterSchoolDessert",
+            "operationDotabata"
+    };
 
     public static void loadAssets() {
         AssetManager am = AssetManager.getInstance();
@@ -12,72 +19,112 @@ public class Init {
     }
 
     private static void loadImages(AssetManager am) {
-        am.loadImage("intro_bg", "/introBackground.jpg");
-        am.loadImage("selection_bg", "/selectionBackground.png");
-        am.loadImage("option_bg", "/optionBackground.jpg");
-        am.loadImage("correction_bg", "/correctionBackground.png");
-        am.loadImage("result_bg", "/resultBackground.png");
+        loadBackgroundImages(am);
+        loadTitleImages(am);
+        loadUiImages(am);
+        loadNoteImages(am);
+    }
 
-        am.loadImage("stage_unwelcomeSchool_bg", "/unwelcomeSchoolBackground.png");
-        am.loadImage("stage_afterSchoolDessert_bg", "/afterSchoolDessertBackground.png");
-        am.loadImage("stage_operationDotabata_bg", "/operationDotabataBackground.png");
-        am.loadImage("stage_comingSoon_bg", "/test.png");
+    private static void loadBackgroundImages(AssetManager am) {
+        am.loadImage("intro_bg", "/image/background/introBackground.jpg");
+        am.loadImage("level_selection_bg", "/image/background/levelSelectionBackground.png");
+        am.loadImage("option_bg", "/image/background/optionBackground.jpg");
+        am.loadImage("calibration_bg", "/image/background/calibrationBackground.png");
+        am.loadImage("result_bg", "/image/background/resultBackground.png");
 
-		/*
-		am.loadImage("stage_unwelcomeSchool_bg", "/testGameBackground.png");
-		am.loadImage("stage_afterSchoolDessert_bg", "/testGameBackground.png");
-		am.loadImage("stage_operationDotabata_bg", "/testGameBackground.png");
-		am.loadImage("stage_comingSoon_bg", "/testGameBackground.png");
-		*/
+        am.loadImage("stage_unwelcomeSchool_bg", "/image/background/unwelcomeSchoolBackground.png");
+        am.loadImage("stage_afterSchoolDessert_bg", "/image/background/afterSchoolDessertBackground.png");
+        am.loadImage("stage_operationDotabata_bg", "/image/background/operationDotabataBackground.png");
 
-        am.loadImage("title_unwelcomeSchool", "/title_unwelcomeSchool.png");
-        am.loadImage("title_afterSchoolDessert", "/title_afterSchoolDessert.png");
-        am.loadImage("title_operationDotabata", "/title_operationDotabata.png");
-        am.loadImage("title_comingSoon", "/title_comingSoon.png");
+        am.loadImage("stage_test_bg", "/image/background/testGameBackground.png");
+    }
 
-        am.loadImage("menu_bar", "/menuBar.png");
-        am.loadImage("game_title", "/gameTitle.png");
-        am.loadImage("press_enter", "/pressEnter.png");
-        am.loadImage("arrow_left", "/arrowLeft.png");
-        am.loadImage("arrow_right", "/arrowRight.png");
-        am.loadImage("corner", "/corner.png");
+    private static void loadTitleImages(AssetManager am) {
+        am.loadImage("title_unwelcomeSchool", "/image/title/unwelcomeSchool.png");
+        am.loadImage("title_afterSchoolDessert", "/image/title/afterSchoolDessert.png");
+        am.loadImage("title_operationDotabata", "/image/title/operationDotabata.png");
+        am.loadImage("title_comingSoon", "/image/title/comingSoon.png");
 
-        am.loadImage("exit", "/exitButton.png");
-        am.loadImage("exit_pressed", "/exitButtonPressed.png");
+        am.loadImage("game_title", "/image/title/gameTitle.png");
+        am.loadImage("press_enter", "/image/title/pressEnter.png");
+    }
 
-        am.loadImage("lane", "/lane.png");
-        am.loadImage("judgement_line", "/judgement_line.png");
+    private static void loadUiImages(AssetManager am) {
+        am.loadImage("menu_bar", "/image/ui/menuBar.png");
+        am.loadImage("arrow_left", "/image/ui/arrowLeft.png");
+        am.loadImage("arrow_right", "/image/ui/arrowRight.png");
+        am.loadImage("corner", "/image/ui/corner.png");
 
+        am.loadImage("exit", "/image/ui/exitButton.png");
+        am.loadImage("exit_pressed", "/image/ui/exitButtonPressed.png");
+
+        am.loadImage("lane", "/image/ui/lane.png");
+        am.loadImage("judgement_line", "/image/ui/judgement_line.png");
+    }
+
+    private static void loadNoteImages(AssetManager am) {
         for (int i = 0; i <= 11; i++) {
-            am.loadImage("note_" + i, "/note_" + i + ".png");
+            am.loadImage("note_" + i, "/image/note/note_" + i + ".png");
         }
 
-        am.loadImage("note_image", "/note_0.png");
+        am.loadImage("note_image", "/image/note/note_0.png");
     }
 
     private static void loadTexts(AssetManager am) {
-        am.loadText("note_correction", "/correction.txt");
-
-        loadChartsForStage(am, "unwelcomeSchool");
-        loadChartsForStage(am, "afterSchoolDessert");
-        loadChartsForStage(am, "operationDotabata");
+        loadStageCharts(am);
     }
 
-    private static void loadChartsForStage(AssetManager am, String levelName) {
-        for (Difficulty difficulty : Difficulty.values()) {
-            loadChart(am, levelName, difficulty, 4);
-            loadChart(am, levelName, difficulty, 6);
+    private static void loadStageCharts(AssetManager am) {
+        for (String stageName : STAGE_NAMES) {
+            loadChartsForStage(am, stageName);
         }
     }
 
-    private static void loadChart(AssetManager am, String levelName, Difficulty difficulty, int keyCount) {
-        String key = buildChartKey(levelName, difficulty, keyCount);
-        String path = "/" + key + ".txt";
+    private static void loadChartsForStage(AssetManager am, String stageName) {
+        for (Difficulty difficulty : Difficulty.values()) {
+            for (KeyMode keyMode : KeyMode.values()) {
+                loadChart(am, stageName, difficulty, keyMode);
+            }
+        }
+    }
+
+    private static void loadChart(
+            AssetManager am,
+            String stageName,
+            Difficulty difficulty,
+            KeyMode keyMode
+    ) {
+        String key = buildChartKey(stageName, difficulty, keyMode);
+        String path = buildChartPath(stageName, difficulty, keyMode);
 
         am.loadText(key, path);
     }
 
-    private static String buildChartKey(String levelName, Difficulty difficulty, int keyCount) {
-        return levelName + "_" + difficulty.name() + "_" + keyCount + "K";
+    public static String buildChartKey(
+            String stageName,
+            Difficulty difficulty,
+            KeyMode keyMode
+    ) {
+        return "note_"
+                + stageName
+                + "_"
+                + difficulty.name().toLowerCase()
+                + "_"
+                + keyMode.getKeyCount()
+                + "K";
+    }
+
+    public static String buildChartPath(
+            String stageName,
+            Difficulty difficulty,
+            KeyMode keyMode
+    ) {
+        return "/chart/"
+                + stageName
+                + "/"
+                + difficulty.name()
+                + "_"
+                + keyMode.getKeyCount()
+                + "K.txt";
     }
 }

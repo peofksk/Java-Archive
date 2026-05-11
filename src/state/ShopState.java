@@ -46,7 +46,7 @@ public class ShopState implements GameState {
 		if (preloaded)
 			return;
 
-		context.bgm.load("/optionMusic.wav");
+		context.bgm.load("/audio/bgm/optionMusic.wav");
 		background = am.getImage("option_bg");
 		notes = new Image[context.getNoteCount()];
 

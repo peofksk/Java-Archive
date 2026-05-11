@@ -8,11 +8,11 @@ public class StageManager {
 	private final List<Stage> stages = new ArrayList<>();
 	private int currentIndex = 0;
 
-	private final CorrectionConfig correctionConfig;
+	private final CalibrationConfig calibrationConfig;
 
 	public StageManager() {
 		loadStages();
-		correctionConfig = loadCorrectionConfig();
+		calibrationConfig = loadCorrectionConfig();
 	}
 
 	private void loadStages() {
@@ -23,12 +23,12 @@ public class StageManager {
 	}
 
 	private void addGameStage(String name, double musicBPM, double musicOffsetSeconds) {
-		stages.add(new Stage(name, "title_" + name, "/sample_" + name + ".wav", "/" + name + ".wav",
+		stages.add(new Stage(name, "title_" + name, "/audio/bgm/" + name + ".wav", "/audio/level/" + name + ".wav",
 				"stage_" + name + "_bg", "note_" + name + "_", musicBPM, musicOffsetSeconds));
 	}
 
-	private CorrectionConfig loadCorrectionConfig() {
-		return new CorrectionConfig("correction", "/correction.wav", "correction_bg", "note_correction", 112.0, 0.0);
+	private CalibrationConfig loadCorrectionConfig() {
+		return new CalibrationConfig("calibration", "/audio/bgm/calibration.wav", "calibration_bg", 112.0, 0.0);
 	}
 
 	public Stage getCurrentStage() {
@@ -59,14 +59,14 @@ public class StageManager {
 		}
 	}
 
-	public CorrectionConfig getCurrentCorrectionConfig() {
-		return correctionConfig;
+	public CalibrationConfig getCurrentCorrectionConfig() {
+		return calibrationConfig;
 	}
 
-	public CorrectionConfig getCurrentStageBasedCorrectionConfig() {
+	public CalibrationConfig getCurrentStageBasedCorrectionConfig() {
 		Stage stage = getCurrentStage();
 
-		return new CorrectionConfig(stage.getLevelName(), stage.getMusicPath(), stage.getBackgroundImageKey(),
-				stage.getNoteFilePath(), stage.getMusicBPM(), stage.getMusicOffsetSeconds());
+		return new CalibrationConfig(stage.getLevelName(), stage.getMusicPath(), stage.getBackgroundImageKey(),
+				stage.getMusicBPM(), stage.getMusicOffsetSeconds());
 	}
 }

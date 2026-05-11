@@ -145,9 +145,10 @@ public class GamePlayState implements GameState {
 	}
 
 	private String buildChartKey() {
-		return stage.getLevelName()
+		return  "note_"
+				+ stage.getLevelName()
 				+ "_"
-				+ difficulty.name()
+				+ difficulty.name().toLowerCase()
 				+ "_"
 				+ context.getKeyCount()
 				+ "K";

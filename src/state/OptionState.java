@@ -54,7 +54,7 @@ public class OptionState implements GameState {
 			return;
 		}
 
-		context.bgm.load("/optionMusic.wav");
+		context.bgm.load("/audio/bgm/optionMusic.wav");
 		background = am.getImage("option_bg");
 
 		preloaded = true;

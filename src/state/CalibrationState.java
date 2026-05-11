@@ -15,7 +15,7 @@ import java.util.List;
 import asset.AssetManager;
 import core.GameContext;
 import core.GameState;
-import stage.CorrectionConfig;
+import stage.CalibrationConfig;
 import state.gameplay.Lane;
 import util.RenderUtils;
 
@@ -39,7 +39,7 @@ public class CalibrationState implements GameState {
     private static final int HIT_MARKER_EXPAND_RADIUS = 16;
 
     private final GameContext context;
-    private final CorrectionConfig correctionConfig;
+    private final CalibrationConfig calibrationConfig;
     private final AssetManager am = AssetManager.getInstance();
 
     private Image background;
@@ -62,15 +62,15 @@ public class CalibrationState implements GameState {
     private final Map<Lane, Boolean> lanePressed = new HashMap<>();
     private final List<OrbitHitMarker> hitMarkers = new ArrayList<>();
 
-    public CalibrationState(GameContext context, CorrectionConfig correctionConfig) {
-        this(context, correctionConfig, DEFAULT_ROTATION_BEATS);
+    public CalibrationState(GameContext context, CalibrationConfig calibrationConfig) {
+        this(context, calibrationConfig, DEFAULT_ROTATION_BEATS);
     }
 
-    public CalibrationState(GameContext context, CorrectionConfig correctionConfig, double rotationBeats) {
+    public CalibrationState(GameContext context, CalibrationConfig calibrationConfig, double rotationBeats) {
         this.context = context;
-        this.correctionConfig = correctionConfig;
-        this.bpm = correctionConfig.getMusicBPM();
-        this.musicOffsetSeconds = correctionConfig.getMusicOffset();
+        this.calibrationConfig = calibrationConfig;
+        this.bpm = calibrationConfig.getMusicBPM();
+        this.musicOffsetSeconds = calibrationConfig.getMusicOffset();
         this.rotationBeats = rotationBeats <= 0.0 ? DEFAULT_ROTATION_BEATS : rotationBeats;
         initializeLanePressedMap();
     }
@@ -82,7 +82,7 @@ public class CalibrationState implements GameState {
         if (!preloaded) {
             preload();
         } else {
-            context.bgm.load(correctionConfig.getMusicPath());
+            context.bgm.load(calibrationConfig.getMusicPath());
         }
 
         clearLanePressedStates();
@@ -196,9 +196,9 @@ public class CalibrationState implements GameState {
     }
 
     void preload() {
-        background = am.getImage(correctionConfig.getBackgroundImageKey());
+        background = am.getImage(calibrationConfig.getBackgroundImageKey());
         noteImage = am.getImage("note_" + context.getNoteIndex());
-        context.bgm.load(correctionConfig.getMusicPath());
+        context.bgm.load(calibrationConfig.getMusicPath());
         preloaded = true;
     }
 
@@ -255,7 +255,7 @@ public class CalibrationState implements GameState {
 
     private void restartPlayback() {
         context.bgm.stop();
-        context.bgm.load(correctionConfig.getMusicPath());
+        context.bgm.load(calibrationConfig.getMusicPath());
 
         clearLanePressedStates();
         hitMarkers.clear();
