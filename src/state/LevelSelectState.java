@@ -1,18 +1,16 @@
 package state;
 
+import java.awt.BasicStroke;
 import java.awt.Color;
-import java.awt.Cursor;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Image;
+import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.event.KeyEvent;
-import java.util.ArrayList;
-import java.util.List;
-
-import javax.swing.JButton;
-import javax.swing.JPanel;
-import javax.swing.SwingConstants;
+import java.awt.event.MouseEvent;
 
 import asset.AssetManager;
 import core.GameContext;
@@ -21,6 +19,17 @@ import stage.Difficulty;
 import state.gameplay.GamePlayState;
 
 public class LevelSelectState implements GameState {
+
+	private static final int BUTTON_START = 0;
+	private static final int BUTTON_OPTION = 1;
+	private static final int BUTTON_CALIBRATION = 2;
+	private static final int BUTTON_SHOP = 3;
+
+	private static final int MENU_X = 745;
+	private static final int MENU_Y = 365;
+	private static final int MENU_W = 180;
+	private static final int MENU_H = 34;
+	private static final int MENU_GAP = 8;
 
 	private final GameContext context;
 	private final AssetManager am = AssetManager.getInstance();
@@ -37,17 +46,16 @@ public class LevelSelectState implements GameState {
 
 	private Mode mode = Mode.LEVEL_SELECT;
 
-	private boolean buttonsAdded = false;
+	private int hoveredMenuButton = -1;
+	private int pressedMenuButton = -1;
 
-	private final List<JButton> buttons = new ArrayList<>();
+	private boolean leftArrowHovered = false;
+	private boolean rightArrowHovered = false;
+	private boolean titleHovered = false;
 
-	private JButton leftArrowButton;
-	private JButton rightArrowButton;
-	private JButton titleButton;
-
-	private JButton difficultyPrevButton;
-	private JButton difficultyNextButton;
-	private JButton difficultyTextButton;
+	private boolean difficultyPrevHovered = false;
+	private boolean difficultyNextHovered = false;
+	private boolean difficultyTextHovered = false;
 
 	public LevelSelectState(GameContext context) {
 		this.context = context;
@@ -67,9 +75,10 @@ public class LevelSelectState implements GameState {
 		mode = Mode.LEVEL_SELECT;
 		context.setCurrentDifficulty(Difficulty.Easy);
 
+		hoveredMenuButton = -1;
+		pressedMenuButton = -1;
+
 		playSample();
-		addButtons();
-		updateButtonVisibility();
 	}
 
 	@Override
@@ -78,26 +87,100 @@ public class LevelSelectState implements GameState {
 
 	@Override
 	public void render(Graphics2D g) {
-		g.drawImage(background, 0, 0, null);
+		if (background != null) {
+			g.drawImage(background, 0, 0, null);
+		} else {
+			g.setColor(Color.BLACK);
+			g.fillRect(0, 0, 1024, 576);
+		}
 
 		Image titleImage = am.getImage(context.sm.getCurrentStage().getTitleImageKey());
-		g.drawImage(titleImage, 312, 80, null);
+		if (titleImage != null) {
+			g.drawImage(titleImage, 312, 80, null);
+		}
 
 		if (mode == Mode.LEVEL_SELECT) {
-			g.drawImage(pressEnter, 357, 500, null);
+			if (pressEnter != null) {
+				g.drawImage(pressEnter, 357, 500, null);
+			}
 
-			if (context.sm.hasPrev()) {
+			if (context.sm.hasPrev() && arrowLeft != null) {
 				g.drawImage(arrowLeft, 77, 225, null);
 			}
 
-			if (context.sm.hasNext()) {
+			if (context.sm.hasNext() && arrowRight != null) {
 				g.drawImage(arrowRight, 713, 225, null);
 			}
+
+			drawMenuButtons(g);
 		}
 
 		if (mode == Mode.DIFFICULTY_SELECT) {
 			drawDifficultySelect(g);
 		}
+	}
+
+	private void drawMenuButtons(Graphics2D g) {
+		Object oldAntialiasing = g.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+		drawMenuButton(g, BUTTON_START, "START");
+		drawMenuButton(g, BUTTON_OPTION, "OPTION");
+		drawMenuButton(g, BUTTON_CALIBRATION, "CALIBRATION");
+		drawMenuButton(g, BUTTON_SHOP, "SHOP");
+
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, oldAntialiasing);
+	}
+
+	private void drawMenuButton(Graphics2D g, int index, String text) {
+		Rectangle bounds = getMenuButtonBounds(index);
+
+		boolean hovered = hoveredMenuButton == index;
+		boolean pressed = pressedMenuButton == index;
+
+		Color fillColor;
+		Color borderColor;
+		Color textColor;
+
+		if (pressed) {
+			fillColor = new Color(35, 105, 165, 210);
+			borderColor = new Color(205, 240, 255, 250);
+			textColor = new Color(255, 255, 255, 255);
+		} else if (hovered) {
+			fillColor = new Color(70, 145, 205, 190);
+			borderColor = new Color(190, 235, 255, 245);
+			textColor = new Color(255, 255, 255, 255);
+		} else {
+			fillColor = new Color(0, 0, 0, 95);
+			borderColor = new Color(120, 190, 245, 180);
+			textColor = new Color(230, 245, 255, 230);
+		}
+
+		g.setColor(new Color(0, 0, 0, 100));
+		g.fillRoundRect(bounds.x + 3, bounds.y + 4, bounds.width, bounds.height, 18, 18);
+
+		g.setColor(fillColor);
+		g.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 18, 18);
+
+		g.setStroke(new BasicStroke(2f));
+		g.setColor(borderColor);
+		g.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 18, 18);
+
+		g.setFont(new Font("SansSerif", Font.BOLD, 15));
+		drawCenteredString(g, text, bounds, textColor);
+	}
+
+	private void drawCenteredString(Graphics2D g, String text, Rectangle bounds, Color color) {
+		FontMetrics fm = g.getFontMetrics();
+
+		int textX = bounds.x + (bounds.width - fm.stringWidth(text)) / 2;
+		int textY = bounds.y + ((bounds.height - fm.getHeight()) / 2) + fm.getAscent();
+
+		g.setColor(new Color(0, 0, 0, 120));
+		g.drawString(text, textX + 2, textY + 2);
+
+		g.setColor(color);
+		g.drawString(text, textX, textY);
 	}
 
 	private void drawDifficultySelect(Graphics2D g) {
@@ -106,9 +189,9 @@ public class LevelSelectState implements GameState {
 
 		int baselineY = 530;
 
-		int labelX = 235;              // 왼쪽으로 더 당김
-		int difficultyCenterX = 700;   // 화살표 사이의 중심축
-		int arrowOffset = 105;         // 중심축으로부터 화살표 거리
+		int labelX = 235;
+		int difficultyCenterX = 700;
+		int arrowOffset = 105;
 
 		Font labelFont = new Font("SansSerif", Font.ITALIC, 35);
 		Font difficultyFont = new Font("SansSerif", Font.BOLD, 35);
@@ -127,7 +210,7 @@ public class LevelSelectState implements GameState {
 			g.setColor(Color.RED);
 		}
 
-		java.awt.FontMetrics difficultyMetrics = g.getFontMetrics();
+		FontMetrics difficultyMetrics = g.getFontMetrics();
 		int difficultyWidth = difficultyMetrics.stringWidth(difficultyText);
 		int difficultyX = difficultyCenterX - difficultyWidth / 2;
 		g.drawString(difficultyText, difficultyX, baselineY);
@@ -135,7 +218,7 @@ public class LevelSelectState implements GameState {
 		g.setFont(arrowFont);
 		g.setColor(Color.WHITE);
 
-		java.awt.FontMetrics arrowMetrics = g.getFontMetrics();
+		FontMetrics arrowMetrics = g.getFontMetrics();
 
 		if (hasLowerDifficulty()) {
 			String leftArrow = "◀";
@@ -152,167 +235,247 @@ public class LevelSelectState implements GameState {
 		}
 	}
 
-	private void addButtons() {
-		if (buttonsAdded) {
-			return;
+	@Override
+	public void keyPressed(KeyEvent e) {
+		if (mode == Mode.LEVEL_SELECT) {
+			if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+				context.changeState(new IntroState(context));
+				return;
+			}
+
+			if (e.getKeyCode() == KeyEvent.VK_C) {
+				openCalibration();
+				return;
+			}
+
+			if (e.getKeyCode() == KeyEvent.VK_O) {
+				openOption();
+				return;
+			}
+
+			if (e.getKeyCode() == KeyEvent.VK_S) {
+				openShop();
+				return;
+			}
+
+			if (e.getKeyCode() == KeyEvent.VK_LEFT && context.sm.hasPrev()) {
+				selectPreviousStage();
+				return;
+			}
+
+			if (e.getKeyCode() == KeyEvent.VK_RIGHT && context.sm.hasNext()) {
+				selectNextStage();
+				return;
+			}
+
+			if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+				enterDifficultySelectMode();
+				return;
+			}
 		}
 
-		JPanel panel = context.getGamePanel();
-		if (panel == null) {
-			return;
-		}
-
-		panel.setLayout(null);
-
-		leftArrowButton = createTransparentButton(55, 195, 190, 170);
-		rightArrowButton = createTransparentButton(695, 195, 190, 170);
-		titleButton = createTransparentButton(295, 65, 430, 260);
-
-		difficultyPrevButton = createTransparentButton(575, 490, 55, 50);
-		difficultyNextButton = createTransparentButton(770, 490, 55, 50);
-		difficultyTextButton = createTransparentButton(625, 490, 150, 50);
-
-		leftArrowButton.addActionListener(e -> {
-			if (mode != Mode.LEVEL_SELECT) {
+		if (mode == Mode.DIFFICULTY_SELECT) {
+			if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+				mode = Mode.LEVEL_SELECT;
+				context.setCurrentDifficulty(Difficulty.Easy);
 				return;
 			}
 
-			if (context.sm.hasPrev()) {
-				context.sm.prev();
-				playSample();
-				updateButtonVisibility();
-				panel.repaint();
-			}
-		});
-
-		rightArrowButton.addActionListener(e -> {
-			if (mode != Mode.LEVEL_SELECT) {
+			if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
+				if (hasHigherDifficulty()) {
+					context.setCurrentDifficulty(context.getCurrentDifficulty().next());
+				}
 				return;
 			}
 
-			if (context.sm.hasNext()) {
-				context.sm.next();
-				playSample();
-				updateButtonVisibility();
-				panel.repaint();
-			}
-		});
-
-		titleButton.addActionListener(e -> {
-			if (mode == Mode.LEVEL_SELECT) {
-				mode = Mode.DIFFICULTY_SELECT;
-				updateButtonVisibility();
-				panel.repaint();
+			if (e.getKeyCode() == KeyEvent.VK_LEFT) {
+				if (hasLowerDifficulty()) {
+					context.setCurrentDifficulty(context.getCurrentDifficulty().prev());
+				}
 				return;
 			}
 
-			if (mode == Mode.DIFFICULTY_SELECT) {
+			if (e.getKeyCode() == KeyEvent.VK_ENTER) {
 				startGame();
 			}
-		});
+		}
+	}
 
-		difficultyPrevButton.addActionListener(e -> {
-			if (mode != Mode.DIFFICULTY_SELECT) {
+	@Override
+	public void mouseMoved(MouseEvent e) {
+		updateHoverState(e.getPoint());
+	}
+
+	@Override
+	public void mouseDragged(MouseEvent e) {
+		updateHoverState(e.getPoint());
+	}
+
+	@Override
+	public void mousePressed(MouseEvent e) {
+		if (e.getButton() != MouseEvent.BUTTON1) {
+			return;
+		}
+
+		Point point = e.getPoint();
+
+		if (mode == Mode.LEVEL_SELECT) {
+			pressedMenuButton = getMenuButtonIndexAt(point);
+
+			if (pressedMenuButton >= 0) {
+				return;
+			}
+		}
+	}
+
+	@Override
+	public void mouseReleased(MouseEvent e) {
+		if (e.getButton() != MouseEvent.BUTTON1) {
+			pressedMenuButton = -1;
+			return;
+		}
+
+		Point point = e.getPoint();
+
+		if (mode == Mode.LEVEL_SELECT) {
+			int releasedMenuButton = getMenuButtonIndexAt(point);
+
+			if (pressedMenuButton >= 0 && pressedMenuButton == releasedMenuButton) {
+				executeMenuButton(releasedMenuButton);
+				pressedMenuButton = -1;
 				return;
 			}
 
-			if (hasLowerDifficulty()) {
+			if (getLeftArrowBounds().contains(point) && context.sm.hasPrev()) {
+				selectPreviousStage();
+				pressedMenuButton = -1;
+				return;
+			}
+
+			if (getRightArrowBounds().contains(point) && context.sm.hasNext()) {
+				selectNextStage();
+				pressedMenuButton = -1;
+				return;
+			}
+
+			if (getTitleBounds().contains(point)) {
+				enterDifficultySelectMode();
+				pressedMenuButton = -1;
+				return;
+			}
+		}
+
+		if (mode == Mode.DIFFICULTY_SELECT) {
+			if (getDifficultyPrevBounds().contains(point) && hasLowerDifficulty()) {
 				context.setCurrentDifficulty(context.getCurrentDifficulty().prev());
-				updateButtonVisibility();
-				panel.repaint();
-			}
-		});
-
-		difficultyNextButton.addActionListener(e -> {
-			if (mode != Mode.DIFFICULTY_SELECT) {
+				pressedMenuButton = -1;
 				return;
 			}
 
-			if (hasHigherDifficulty()) {
+			if (getDifficultyNextBounds().contains(point) && hasHigherDifficulty()) {
 				context.setCurrentDifficulty(context.getCurrentDifficulty().next());
-				updateButtonVisibility();
-				panel.repaint();
+				pressedMenuButton = -1;
+				return;
 			}
-		});
 
-		difficultyTextButton.addActionListener(e -> {
-			if (mode == Mode.DIFFICULTY_SELECT) {
+			if (getDifficultyTextBounds().contains(point)) {
 				startGame();
+				pressedMenuButton = -1;
+				return;
 			}
-		});
+		}
 
-		addButton(panel, leftArrowButton);
-		addButton(panel, rightArrowButton);
-		addButton(panel, titleButton);
-		addButton(panel, difficultyPrevButton);
-		addButton(panel, difficultyNextButton);
-		addButton(panel, difficultyTextButton);
-
-		buttonsAdded = true;
-
-		panel.revalidate();
-		panel.repaint();
+		pressedMenuButton = -1;
 	}
 
-	private JButton createTransparentButton(int x, int y, int width, int height) {
-		JButton button = new JButton();
+	private void updateHoverState(Point point) {
+		if (mode == Mode.LEVEL_SELECT) {
+			hoveredMenuButton = getMenuButtonIndexAt(point);
+			leftArrowHovered = getLeftArrowBounds().contains(point) && context.sm.hasPrev();
+			rightArrowHovered = getRightArrowBounds().contains(point) && context.sm.hasNext();
+			titleHovered = getTitleBounds().contains(point);
+		} else {
+			hoveredMenuButton = -1;
+			leftArrowHovered = false;
+			rightArrowHovered = false;
+			titleHovered = false;
+		}
 
-		button.setBounds(new Rectangle(x, y, width, height));
-		button.setHorizontalAlignment(SwingConstants.CENTER);
-
-		button.setOpaque(false);
-		button.setContentAreaFilled(false);
-		button.setBorderPainted(false);
-		button.setFocusPainted(false);
-		button.setFocusable(false);
-
-		button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-
-		return button;
+		if (mode == Mode.DIFFICULTY_SELECT) {
+			difficultyPrevHovered = getDifficultyPrevBounds().contains(point) && hasLowerDifficulty();
+			difficultyNextHovered = getDifficultyNextBounds().contains(point) && hasHigherDifficulty();
+			difficultyTextHovered = getDifficultyTextBounds().contains(point);
+		} else {
+			difficultyPrevHovered = false;
+			difficultyNextHovered = false;
+			difficultyTextHovered = false;
+		}
 	}
 
-	private void addButton(JPanel panel, JButton button) {
-		buttons.add(button);
-		panel.add(button);
+	private int getMenuButtonIndexAt(Point point) {
+		for (int i = 0; i < 4; i++) {
+			if (getMenuButtonBounds(i).contains(point)) {
+				return i;
+			}
+		}
+
+		return -1;
 	}
 
-	private void updateButtonVisibility() {
-		if (!buttonsAdded) {
+	private Rectangle getMenuButtonBounds(int index) {
+		int y = MENU_Y + index * (MENU_H + MENU_GAP);
+		return new Rectangle(MENU_X, y, MENU_W, MENU_H);
+	}
+
+	private Rectangle getLeftArrowBounds() {
+		return new Rectangle(55, 195, 190, 170);
+	}
+
+	private Rectangle getRightArrowBounds() {
+		return new Rectangle(695, 195, 190, 170);
+	}
+
+	private Rectangle getTitleBounds() {
+		return new Rectangle(295, 65, 430, 260);
+	}
+
+	private Rectangle getDifficultyPrevBounds() {
+		return new Rectangle(575, 490, 55, 50);
+	}
+
+	private Rectangle getDifficultyNextBounds() {
+		return new Rectangle(770, 490, 55, 50);
+	}
+
+	private Rectangle getDifficultyTextBounds() {
+		return new Rectangle(625, 490, 150, 50);
+	}
+
+	private void executeMenuButton(int buttonIndex) {
+		switch (buttonIndex) {
+			case BUTTON_START -> enterDifficultySelectMode();
+			case BUTTON_OPTION -> openOption();
+			case BUTTON_CALIBRATION -> openCalibration();
+			case BUTTON_SHOP -> openShop();
+		}
+	}
+
+	private void selectPreviousStage() {
+		if (!context.sm.hasPrev()) {
 			return;
 		}
 
-		boolean levelSelectMode = mode == Mode.LEVEL_SELECT;
-		boolean difficultySelectMode = mode == Mode.DIFFICULTY_SELECT;
+		context.sm.prev();
+		playSample();
+	}
 
-		if (leftArrowButton != null) {
-			leftArrowButton.setVisible(levelSelectMode && context.sm.hasPrev());
-			leftArrowButton.setEnabled(levelSelectMode && context.sm.hasPrev());
+	private void selectNextStage() {
+		if (!context.sm.hasNext()) {
+			return;
 		}
 
-		if (rightArrowButton != null) {
-			rightArrowButton.setVisible(levelSelectMode && context.sm.hasNext());
-			rightArrowButton.setEnabled(levelSelectMode && context.sm.hasNext());
-		}
-
-		if (titleButton != null) {
-			titleButton.setVisible(true);
-			titleButton.setEnabled(true);
-		}
-
-		if (difficultyPrevButton != null) {
-			difficultyPrevButton.setVisible(difficultySelectMode && hasLowerDifficulty());
-			difficultyPrevButton.setEnabled(difficultySelectMode && hasLowerDifficulty());
-		}
-
-		if (difficultyNextButton != null) {
-			difficultyNextButton.setVisible(difficultySelectMode && hasHigherDifficulty());
-			difficultyNextButton.setEnabled(difficultySelectMode && hasHigherDifficulty());
-		}
-
-		if (difficultyTextButton != null) {
-			difficultyTextButton.setVisible(difficultySelectMode);
-			difficultyTextButton.setEnabled(difficultySelectMode);
-		}
+		context.sm.next();
+		playSample();
 	}
 
 	private boolean hasHigherDifficulty() {
@@ -322,6 +485,25 @@ public class LevelSelectState implements GameState {
 
 	private boolean hasLowerDifficulty() {
 		return context.getCurrentDifficulty().ordinal() > 0;
+	}
+
+	private void enterDifficultySelectMode() {
+		mode = Mode.DIFFICULTY_SELECT;
+		hoveredMenuButton = -1;
+		pressedMenuButton = -1;
+	}
+
+	private void openOption() {
+		context.changeState(new OptionState(context));
+	}
+
+	private void openCalibration() {
+		CalibrationState next = new CalibrationState(context, context.sm.getCurrentCorrectionConfig());
+		context.changeState(new LoadState(context, "Loading Calibration...", () -> next.preload(), () -> next));
+	}
+
+	private void openShop() {
+		context.changeState(new ShopState(context));
 	}
 
 	private void startGame() {
@@ -335,110 +517,12 @@ public class LevelSelectState implements GameState {
 	}
 
 	@Override
-	public void keyPressed(KeyEvent e) {
-		if (mode == Mode.LEVEL_SELECT) {
-			if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
-				context.changeState(new IntroState(context));
-				return;
-			}
-
-			if (e.getKeyCode() == KeyEvent.VK_C) {
-				CalibrationState next = new CalibrationState(context, context.sm.getCurrentCorrectionConfig());
-				context.changeState(new LoadState(context, "Loading Calibration...", () -> next.preload(), () -> next));
-				return;
-			}
-
-			if (e.getKeyCode() == KeyEvent.VK_O) {
-				context.changeState(new OptionState(context));
-				return;
-			}
-
-			if (e.getKeyCode() == KeyEvent.VK_S) {
-				context.changeState(new ShopState(context));
-			}
-
-			if (e.getKeyCode() == KeyEvent.VK_LEFT && context.sm.hasPrev()) {
-				context.sm.prev();
-				playSample();
-				updateButtonVisibility();
-				return;
-			}
-
-			if (e.getKeyCode() == KeyEvent.VK_RIGHT && context.sm.hasNext()) {
-				context.sm.next();
-				playSample();
-				updateButtonVisibility();
-				return;
-			}
-
-			if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-				mode = Mode.DIFFICULTY_SELECT;
-				updateButtonVisibility();
-				return;
-			}
-		}
-
-		if (mode == Mode.DIFFICULTY_SELECT) {
-			if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
-				mode = Mode.LEVEL_SELECT;
-				context.setCurrentDifficulty(Difficulty.Easy);
-				updateButtonVisibility();
-				return;
-			}
-
-			if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
-				if (hasHigherDifficulty()) {
-					context.setCurrentDifficulty(context.getCurrentDifficulty().next());
-					updateButtonVisibility();
-				}
-				return;
-			}
-
-			if (e.getKeyCode() == KeyEvent.VK_LEFT) {
-				if (hasLowerDifficulty()) {
-					context.setCurrentDifficulty(context.getCurrentDifficulty().prev());
-					updateButtonVisibility();
-				}
-				return;
-			}
-
-			if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-				startGame();
-			}
-		}
-	}
-
-	@Override
 	public void keyReleased(KeyEvent e) {
 	}
 
 	@Override
 	public void exit() {
-		removeButtons();
-	}
-
-	private void removeButtons() {
-		JPanel panel = context.getGamePanel();
-		if (panel == null) {
-			return;
-		}
-
-		for (JButton button : buttons) {
-			panel.remove(button);
-		}
-
-		buttons.clear();
-
-		leftArrowButton = null;
-		rightArrowButton = null;
-		titleButton = null;
-		difficultyPrevButton = null;
-		difficultyNextButton = null;
-		difficultyTextButton = null;
-
-		buttonsAdded = false;
-
-		panel.revalidate();
-		panel.repaint();
+		hoveredMenuButton = -1;
+		pressedMenuButton = -1;
 	}
 }

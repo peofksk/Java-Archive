@@ -1,19 +1,20 @@
 package state;
 
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Image;
+import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import javax.swing.JButton;
-import javax.swing.JPanel;
-import javax.swing.SwingConstants;
 
 import asset.AssetManager;
 import core.GameContext;
@@ -23,27 +24,52 @@ import state.gameplay.Lane;
 
 public class OptionState implements GameState {
 
+	private static final int BUTTON_KEY_MODE_4 = 0;
+	private static final int BUTTON_KEY_MODE_6 = 1;
+	private static final int BUTTON_BACK = 2;
+	private static final int BUTTON_SAVE = 3;
+
+	private static final int LEFT_X = 475;
+	private static final int RIGHT_X = 665;
+
+	private static final int MODE_TEXT_Y = 98;
+	private static final int GUIDE_TOP_Y = 118;
+
+	private static final int MODE_Y = 146;
+	private static final int MODE_BUTTON_W = 175;
+	private static final int MODE_BUTTON_H = 42;
+
+	private static final int LANE_START_Y = 216;
+	private static final int LANE_BUTTON_W = 175;
+	private static final int LANE_BUTTON_H = 38;
+	private static final int LANE_GAP_Y = 12;
+
+	private static final int WARNING_Y = 375;
+	private static final int GUIDE_BOTTOM_Y = 400;
+
+	private static final int BOTTOM_Y = 438;
+	private static final int BOTTOM_BUTTON_W = 175;
+	private static final int BOTTOM_BUTTON_H = 42;
+
 	private final GameContext context;
 	private final AssetManager am = AssetManager.getInstance();
 
 	private Image background;
 
 	private boolean preloaded = false;
-	private boolean buttonsAdded = false;
 	private boolean savedNoticeVisible = false;
 
-	private final List<JButton> buttons = new ArrayList<>();
-	private final List<JButton> laneKeyButtons = new ArrayList<>();
-
-	private JButton keyMode4Button;
-	private JButton keyMode6Button;
-	private JButton backButton;
-	private JButton saveButton;
-
 	private Lane waitingKeyLane = null;
+	private String warningMessage = null;
 
 	private int pendingKeyCount;
 	private final Map<Lane, Integer> pendingKeyBindings = new LinkedHashMap<>();
+
+	private int hoveredFixedButton = -1;
+	private int pressedFixedButton = -1;
+
+	private Lane hoveredLaneButton = null;
+	private Lane pressedLaneButton = null;
 
 	public OptionState(GameContext context) {
 		this.context = context;
@@ -70,8 +96,15 @@ public class OptionState implements GameState {
 
 		copySettingsFromContext();
 
+		waitingKeyLane = null;
+		warningMessage = null;
+		savedNoticeVisible = false;
+		hoveredFixedButton = -1;
+		pressedFixedButton = -1;
+		hoveredLaneButton = null;
+		pressedLaneButton = null;
+
 		context.bgm.playLoaded(true);
-		addButtons();
 	}
 
 	private void copySettingsFromContext() {
@@ -89,6 +122,8 @@ public class OptionState implements GameState {
 				pendingKeyBindings.put(lane, keyCode);
 			}
 		}
+
+		ensurePendingBindingsForCurrentMode();
 	}
 
 	@Override
@@ -104,36 +139,142 @@ public class OptionState implements GameState {
 			g.fillRect(0, 0, 1024, 576);
 		}
 
-		drawTitle(g);
+		Object oldAntialiasing = g.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
 		drawGuide(g);
+		drawButtons(g);
 		drawSavedNotice(g);
-	}
 
-	private void drawTitle(Graphics2D g) {
-		g.setColor(new Color(255, 255, 255, 230));
-		g.setFont(new Font("Dialog", Font.BOLD, 42));
-		g.drawString("OPTIONS", 80, 80);
-
-		g.setFont(new Font("Dialog", Font.BOLD, 24));
-		g.drawString("Key Settings", 84, 125);
-
-		g.setFont(new Font("Dialog", Font.BOLD, 18));
-		g.drawString("Current Mode: " + pendingKeyCount + "K", 475, 125);
+		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, oldAntialiasing);
 	}
 
 	private void drawGuide(Graphics2D g) {
+		g.setColor(new Color(255, 255, 255, 230));
+		g.setFont(new Font("Dialog", Font.BOLD, 18));
+		g.drawString("Current Mode: " + pendingKeyCount + "K", 475, MODE_TEXT_Y);
+
 		g.setColor(new Color(255, 255, 255, 190));
 		g.setFont(new Font("Dialog", Font.PLAIN, 15));
+		g.drawString("Press 4 / 6 or click buttons to change key mode.", 475, GUIDE_TOP_Y);
 
-		g.drawString("Press 4 / 6 or click buttons to change key mode.", 475, 145);
+		if (warningMessage != null && !warningMessage.isBlank()) {
+			g.setColor(new Color(255, 220, 90, 235));
+			g.setFont(new Font("Dialog", Font.BOLD, 15));
+			g.drawString(warningMessage, 475, WARNING_Y);
+		}
 
 		if (waitingKeyLane != null) {
 			g.setColor(new Color(255, 230, 130));
 			g.setFont(new Font("Dialog", Font.BOLD, 17));
-			g.drawString("Press a key for: " + waitingKeyLane.getDisplayName(), 475, 420);
+			g.drawString("Press a key for: " + waitingKeyLane.getDisplayName(), 475, GUIDE_BOTTOM_Y);
 		} else {
-			g.drawString("Click a lane button, then press a key to rebind.", 475, 420);
+			g.setColor(new Color(255, 255, 255, 190));
+			g.setFont(new Font("Dialog", Font.PLAIN, 15));
+			g.drawString("Click a lane button, then press a key to rebind.", 475, GUIDE_BOTTOM_Y);
 		}
+	}
+
+	private void drawButtons(Graphics2D g) {
+		drawFixedButton(g, BUTTON_KEY_MODE_4, getFixedButtonText(BUTTON_KEY_MODE_4));
+		drawFixedButton(g, BUTTON_KEY_MODE_6, getFixedButtonText(BUTTON_KEY_MODE_6));
+
+		for (Lane lane : getPendingPlayableLanes()) {
+			drawLaneButton(g, lane);
+		}
+
+		drawFixedButton(g, BUTTON_BACK, "Back");
+		drawFixedButton(g, BUTTON_SAVE, "Save");
+	}
+
+	private String getFixedButtonText(int buttonIndex) {
+		if (buttonIndex == BUTTON_KEY_MODE_4) {
+			return pendingKeyCount == 4 ? "4K Mode ✓" : "4K Mode";
+		}
+
+		if (buttonIndex == BUTTON_KEY_MODE_6) {
+			return pendingKeyCount == 6 ? "6K Mode ✓" : "6K Mode";
+		}
+
+		return "";
+	}
+
+	private void drawFixedButton(Graphics2D g, int buttonIndex, String text) {
+		Rectangle bounds = getFixedButtonBounds(buttonIndex);
+
+		boolean hovered = hoveredFixedButton == buttonIndex;
+		boolean pressed = pressedFixedButton == buttonIndex;
+		boolean selected = (buttonIndex == BUTTON_KEY_MODE_4 && pendingKeyCount == 4)
+				|| (buttonIndex == BUTTON_KEY_MODE_6 && pendingKeyCount == 6);
+
+		drawButton(g, bounds, text, hovered, pressed, selected);
+	}
+
+	private void drawLaneButton(Graphics2D g, Lane lane) {
+		Rectangle bounds = getLaneButtonBounds(lane);
+
+		boolean hovered = hoveredLaneButton == lane;
+		boolean pressed = pressedLaneButton == lane;
+		boolean selected = waitingKeyLane == lane;
+
+		drawButton(g, bounds, getLaneButtonText(lane), hovered, pressed, selected);
+	}
+
+	private void drawButton(
+			Graphics2D g,
+			Rectangle bounds,
+			String text,
+			boolean hovered,
+			boolean pressed,
+			boolean selected
+	) {
+		Color fillColor;
+		Color borderColor;
+		Color textColor;
+
+		if (pressed) {
+			fillColor = new Color(35, 105, 165, 220);
+			borderColor = new Color(210, 245, 255, 255);
+			textColor = Color.WHITE;
+		} else if (selected) {
+			fillColor = new Color(45, 135, 95, 210);
+			borderColor = new Color(180, 255, 210, 245);
+			textColor = Color.WHITE;
+		} else if (hovered) {
+			fillColor = new Color(60, 120, 180, 200);
+			borderColor = new Color(190, 235, 255, 245);
+			textColor = Color.WHITE;
+		} else {
+			fillColor = new Color(25, 25, 35, 210);
+			borderColor = new Color(120, 170, 210, 160);
+			textColor = new Color(235, 248, 255);
+		}
+
+		g.setColor(new Color(0, 0, 0, 120));
+		g.fillRoundRect(bounds.x + 3, bounds.y + 4, bounds.width, bounds.height, 14, 14);
+
+		g.setColor(fillColor);
+		g.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 14, 14);
+
+		g.setStroke(new BasicStroke(2f));
+		g.setColor(borderColor);
+		g.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 14, 14);
+
+		g.setFont(new Font("Dialog", Font.BOLD, 15));
+		drawCenteredString(g, text, bounds, textColor);
+	}
+
+	private void drawCenteredString(Graphics2D g, String text, Rectangle bounds, Color color) {
+		FontMetrics fm = g.getFontMetrics();
+
+		int textX = bounds.x + (bounds.width - fm.stringWidth(text)) / 2;
+		int textY = bounds.y + ((bounds.height - fm.getHeight()) / 2) + fm.getAscent();
+
+		g.setColor(new Color(0, 0, 0, 120));
+		g.drawString(text, textX + 1, textY + 1);
+
+		g.setColor(color);
+		g.drawString(text, textX, textY);
 	}
 
 	private void drawSavedNotice(Graphics2D g) {
@@ -142,78 +283,168 @@ public class OptionState implements GameState {
 		}
 
 		g.setColor(new Color(160, 255, 180, 230));
-		g.setFont(new Font("Dialog", Font.BOLD, 16));
-		g.drawString("Saved!", 855, 482);
+		g.setFont(new Font("Dialog", Font.BOLD, 20));
+		g.drawString("Saved!", 855, 463);
 	}
 
-	private void addButtons() {
-		if (buttonsAdded) {
+	@Override
+	public void keyPressed(KeyEvent e) {
+		if (waitingKeyLane != null) {
+			handleKeyBindingInput(e);
 			return;
 		}
 
-		JPanel panel = context.getGamePanel();
-		if (panel == null) {
-			return;
-		}
-
-		panel.setLayout(null);
-
-		keyMode4Button = createButton("4K Mode", 475, 160, 175, 42);
-		keyMode6Button = createButton("6K Mode", 665, 160, 175, 42);
-
-		backButton = createButton("Back", 475, 455, 175, 42);
-		saveButton = createButton("Save", 665, 455, 175, 42);
-
-		keyMode4Button.addActionListener(e -> {
+		if (e.getKeyCode() == KeyEvent.VK_4) {
 			setPendingKeyMode(4);
-			panel.repaint();
-		});
-
-		keyMode6Button.addActionListener(e -> {
+		} else if (e.getKeyCode() == KeyEvent.VK_6) {
 			setPendingKeyMode(6);
-			panel.repaint();
-		});
-
-		backButton.addActionListener(e -> {
-			context.changeState(new LevelSelectState(context));
-		});
-
-		saveButton.addActionListener(e -> {
-			applyPendingSettingsToContext();
-			context.saveSettings();
-			savedNoticeVisible = true;
-			panel.repaint();
-		});
-
-		addButton(panel, keyMode4Button);
-		addButton(panel, keyMode6Button);
-		addButton(panel, backButton);
-		addButton(panel, saveButton);
-
-		rebuildLaneKeyButtons();
-
-		buttonsAdded = true;
-		panel.revalidate();
-		panel.repaint();
+		} else if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+			backToLevelSelect();
+		} else if (e.getKeyCode() == KeyEvent.VK_S) {
+			saveSettings();
+		}
 	}
 
-	private JButton createButton(String text, int x, int y, int width, int height) {
-		JButton button = new JButton(text);
-		button.setBounds(new Rectangle(x, y, width, height));
-		button.setFocusPainted(false);
-		button.setFocusable(false);
-		button.setHorizontalAlignment(SwingConstants.CENTER);
-		button.setFont(new Font("Dialog", Font.BOLD, 15));
-		button.setBackground(new Color(25, 25, 35));
-		button.setForeground(Color.WHITE);
-		button.setBorderPainted(false);
-
-		return button;
+	@Override
+	public void mouseMoved(MouseEvent e) {
+		updateHoverState(e.getPoint());
 	}
 
-	private void addButton(JPanel panel, JButton button) {
-		buttons.add(button);
-		panel.add(button);
+	@Override
+	public void mouseDragged(MouseEvent e) {
+		updateHoverState(e.getPoint());
+	}
+
+	@Override
+	public void mousePressed(MouseEvent e) {
+		if (e.getButton() != MouseEvent.BUTTON1) {
+			return;
+		}
+
+		Point point = e.getPoint();
+
+		pressedFixedButton = getFixedButtonIndexAt(point);
+		pressedLaneButton = getLaneButtonAt(point);
+	}
+
+	@Override
+	public void mouseReleased(MouseEvent e) {
+		if (e.getButton() != MouseEvent.BUTTON1) {
+			clearPressedState();
+			return;
+		}
+
+		Point point = e.getPoint();
+
+		int releasedFixedButton = getFixedButtonIndexAt(point);
+		Lane releasedLaneButton = getLaneButtonAt(point);
+
+		if (pressedFixedButton >= 0 && pressedFixedButton == releasedFixedButton) {
+			executeFixedButton(releasedFixedButton);
+			clearPressedState();
+			return;
+		}
+
+		if (pressedLaneButton != null && pressedLaneButton == releasedLaneButton) {
+			selectLaneForKeyBinding(releasedLaneButton);
+			clearPressedState();
+			return;
+		}
+
+		clearPressedState();
+	}
+
+	private void updateHoverState(Point point) {
+		hoveredFixedButton = getFixedButtonIndexAt(point);
+		hoveredLaneButton = getLaneButtonAt(point);
+	}
+
+	private void clearPressedState() {
+		pressedFixedButton = -1;
+		pressedLaneButton = null;
+	}
+
+	private int getFixedButtonIndexAt(Point point) {
+		int[] indexes = {
+				BUTTON_KEY_MODE_4,
+				BUTTON_KEY_MODE_6,
+				BUTTON_BACK,
+				BUTTON_SAVE
+		};
+
+		for (int index : indexes) {
+			if (getFixedButtonBounds(index).contains(point)) {
+				return index;
+			}
+		}
+
+		return -1;
+	}
+
+	private Lane getLaneButtonAt(Point point) {
+		for (Lane lane : getPendingPlayableLanes()) {
+			if (getLaneButtonBounds(lane).contains(point)) {
+				return lane;
+			}
+		}
+
+		return null;
+	}
+
+	private Rectangle getFixedButtonBounds(int buttonIndex) {
+		return switch (buttonIndex) {
+			case BUTTON_KEY_MODE_4 -> new Rectangle(LEFT_X, MODE_Y, MODE_BUTTON_W, MODE_BUTTON_H);
+			case BUTTON_KEY_MODE_6 -> new Rectangle(RIGHT_X, MODE_Y, MODE_BUTTON_W, MODE_BUTTON_H);
+			case BUTTON_BACK -> new Rectangle(LEFT_X, BOTTOM_Y, BOTTOM_BUTTON_W, BOTTOM_BUTTON_H);
+			case BUTTON_SAVE -> new Rectangle(RIGHT_X, BOTTOM_Y, BOTTOM_BUTTON_W, BOTTOM_BUTTON_H);
+			default -> new Rectangle();
+		};
+	}
+
+	private Rectangle getLaneButtonBounds(Lane lane) {
+		List<Lane> playableLanes = getPendingPlayableLanes();
+
+		int index = playableLanes.indexOf(lane);
+		if (index < 0) {
+			return new Rectangle();
+		}
+
+		int leftColumnCount = (int) Math.ceil(playableLanes.size() / 2.0);
+
+		int column;
+		int row;
+
+		if (index < leftColumnCount) {
+			column = 0;
+			row = index;
+		} else {
+			column = 1;
+			row = index - leftColumnCount;
+		}
+
+		int x = column == 0 ? LEFT_X : RIGHT_X;
+		int y = LANE_START_Y + row * (LANE_BUTTON_H + LANE_GAP_Y);
+
+		return new Rectangle(x, y, LANE_BUTTON_W, LANE_BUTTON_H);
+	}
+
+	private void executeFixedButton(int buttonIndex) {
+		switch (buttonIndex) {
+			case BUTTON_KEY_MODE_4 -> setPendingKeyMode(4);
+			case BUTTON_KEY_MODE_6 -> setPendingKeyMode(6);
+			case BUTTON_BACK -> backToLevelSelect();
+			case BUTTON_SAVE -> saveSettings();
+		}
+	}
+
+	private void selectLaneForKeyBinding(Lane lane) {
+		if (lane == null) {
+			return;
+		}
+
+		waitingKeyLane = lane;
+		warningMessage = null;
+		savedNoticeVisible = false;
 	}
 
 	private void setPendingKeyMode(int keyCount) {
@@ -223,77 +454,18 @@ public class OptionState implements GameState {
 
 		pendingKeyCount = keyCount;
 		waitingKeyLane = null;
+		warningMessage = null;
 		savedNoticeVisible = false;
+		hoveredLaneButton = null;
+		pressedLaneButton = null;
 
 		ensurePendingBindingsForCurrentMode();
-		rebuildLaneKeyButtons();
 	}
 
 	private void ensurePendingBindingsForCurrentMode() {
 		for (Lane lane : getPendingPlayableLanes()) {
 			pendingKeyBindings.putIfAbsent(lane, lane.getDefaultKeyCode());
 		}
-	}
-
-	private void rebuildLaneKeyButtons() {
-		JPanel panel = context.getGamePanel();
-		if (panel == null) {
-			return;
-		}
-
-		for (JButton button : laneKeyButtons) {
-			panel.remove(button);
-			buttons.remove(button);
-		}
-
-		laneKeyButtons.clear();
-		waitingKeyLane = null;
-
-		int leftX = 475;
-		int rightX = 665;
-		int startY = 230;
-
-		int width = 175;
-		int height = 38;
-		int gapY = 12;
-
-		List<Lane> playableLanes = getPendingPlayableLanes();
-		int leftColumnCount = (int) Math.ceil(playableLanes.size() / 2.0);
-
-		for (int i = 0; i < playableLanes.size(); i++) {
-			Lane lane = playableLanes.get(i);
-
-			int column;
-			int row;
-
-			if (i < leftColumnCount) {
-				column = 0;
-				row = i;
-			} else {
-				column = 1;
-				row = i - leftColumnCount;
-			}
-
-			int x = column == 0 ? leftX : rightX;
-			int y = startY + row * (height + gapY);
-
-			JButton button = createButton(getLaneButtonText(lane), x, y, width, height);
-
-			button.addActionListener(e -> {
-				waitingKeyLane = lane;
-				savedNoticeVisible = false;
-				updateLaneKeyButtonTexts();
-				panel.repaint();
-			});
-
-			laneKeyButtons.add(button);
-			addButton(panel, button);
-		}
-
-		updateKeyModeButtonTexts();
-
-		panel.revalidate();
-		panel.repaint();
 	}
 
 	private List<Lane> getPendingPlayableLanes() {
@@ -326,25 +498,12 @@ public class OptionState implements GameState {
 		return keyCode;
 	}
 
-	private void updateLaneKeyButtonTexts() {
-		List<Lane> playableLanes = getPendingPlayableLanes();
-
-		for (int i = 0; i < laneKeyButtons.size() && i < playableLanes.size(); i++) {
-			Lane lane = playableLanes.get(i);
-			laneKeyButtons.get(i).setText(getLaneButtonText(lane));
-		}
-
-		updateKeyModeButtonTexts();
-	}
-
-	private void updateKeyModeButtonTexts() {
-		if (keyMode4Button != null) {
-			keyMode4Button.setText(pendingKeyCount == 4 ? "4K Mode ✓" : "4K Mode");
-		}
-
-		if (keyMode6Button != null) {
-			keyMode6Button.setText(pendingKeyCount == 6 ? "6K Mode ✓" : "6K Mode");
-		}
+	private void saveSettings() {
+		applyPendingSettingsToContext();
+		context.saveSettings();
+		savedNoticeVisible = true;
+		waitingKeyLane = null;
+		warningMessage = null;
 	}
 
 	private void applyPendingSettingsToContext() {
@@ -356,69 +515,12 @@ public class OptionState implements GameState {
 		}
 	}
 
-	@Override
-	public void exit() {
-		removeButtons();
-		waitingKeyLane = null;
-		savedNoticeVisible = false;
-		pendingKeyBindings.clear();
-	}
-
-	private void removeButtons() {
-		JPanel panel = context.getGamePanel();
-		if (panel == null) {
-			return;
-		}
-
-		for (JButton button : buttons) {
-			panel.remove(button);
-		}
-
-		buttons.clear();
-		laneKeyButtons.clear();
-		buttonsAdded = false;
-
-		panel.revalidate();
-		panel.repaint();
-	}
-
-	@Override
-	public void keyPressed(KeyEvent e) {
-		if (waitingKeyLane != null) {
-			handleKeyBindingInput(e);
-			return;
-		}
-
-		if (e.getKeyCode() == KeyEvent.VK_4) {
-			setPendingKeyMode(4);
-		} else if (e.getKeyCode() == KeyEvent.VK_6) {
-			setPendingKeyMode(6);
-		} else if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
-			context.changeState(new LevelSelectState(context));
-		} else if (e.getKeyCode() == KeyEvent.VK_S) {
-			applyPendingSettingsToContext();
-			context.saveSettings();
-			savedNoticeVisible = true;
-
-			JPanel panel = context.getGamePanel();
-			if (panel != null) {
-				panel.repaint();
-			}
-		}
-	}
-
 	private void handleKeyBindingInput(KeyEvent e) {
 		int keyCode = e.getKeyCode();
 
 		if (keyCode == KeyEvent.VK_ESCAPE) {
 			waitingKeyLane = null;
-			updateLaneKeyButtonTexts();
-
-			JPanel panel = context.getGamePanel();
-			if (panel != null) {
-				panel.repaint();
-			}
-
+			warningMessage = null;
 			return;
 		}
 
@@ -426,20 +528,25 @@ public class OptionState implements GameState {
 			return;
 		}
 
-		removeDuplicatePendingBinding(keyCode);
+		Lane duplicatedLane = findLaneUsingKeyCode(keyCode);
+
+		if (duplicatedLane != null && duplicatedLane != waitingKeyLane) {
+			String keyText = KeyEvent.getKeyText(keyCode);
+
+			warningMessage = keyText + " is already assigned to " + duplicatedLane.getDisplayName() + ". Change canceled.";
+			waitingKeyLane = null;
+			savedNoticeVisible = false;
+			return;
+		}
+
 		pendingKeyBindings.put(waitingKeyLane, keyCode);
 
 		waitingKeyLane = null;
+		warningMessage = null;
 		savedNoticeVisible = false;
-		updateLaneKeyButtonTexts();
-
-		JPanel panel = context.getGamePanel();
-		if (panel != null) {
-			panel.repaint();
-		}
 	}
 
-	private void removeDuplicatePendingBinding(int keyCode) {
+	private Lane findLaneUsingKeyCode(int keyCode) {
 		for (Lane lane : getPendingPlayableLanes()) {
 			if (lane == waitingKeyLane) {
 				continue;
@@ -448,12 +555,31 @@ public class OptionState implements GameState {
 			int existingKeyCode = getPendingKeyCodeForLane(lane);
 
 			if (existingKeyCode == keyCode) {
-				pendingKeyBindings.put(lane, lane.getDefaultKeyCode());
+				return lane;
 			}
 		}
+
+		return null;
+	}
+
+	private void backToLevelSelect() {
+		context.changeState(new LevelSelectState(context));
 	}
 
 	@Override
 	public void keyReleased(KeyEvent e) {
+	}
+
+	@Override
+	public void exit() {
+		waitingKeyLane = null;
+		warningMessage = null;
+		savedNoticeVisible = false;
+		pendingKeyBindings.clear();
+
+		hoveredFixedButton = -1;
+		pressedFixedButton = -1;
+		hoveredLaneButton = null;
+		pressedLaneButton = null;
 	}
 }
