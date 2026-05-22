@@ -6,7 +6,11 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.Image;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -34,9 +38,21 @@ public class CalibrationState implements GameState {
     private static final int ORBIT_RADIUS = 170;
     private static final int NOTE_DRAW_SIZE = 42;
 
-    private static final double HIT_MARKER_LIFETIME = 0.35;
-    private static final int HIT_MARKER_BASE_RADIUS = 18;
-    private static final int HIT_MARKER_EXPAND_RADIUS = 16;
+    private static final double HIT_MARKER_SHRINK_DURATION = 0.22;
+    private static final int HIT_MARKER_START_RADIUS = 34;
+    private static final int HIT_MARKER_FINAL_RADIUS = 13;
+
+    private static final int HUD_X = 660;
+    private static final int HUD_Y = 70;
+    private static final int HUD_W = 300;
+    private static final int HUD_H = 430;
+
+    private static final int HUD_PAD_X = 28;
+
+    private static final int BACK_BUTTON_W = 76;
+    private static final int BACK_BUTTON_H = 30;
+    private static final int BACK_BUTTON_X = SCREEN_WIDTH - BACK_BUTTON_W - 22;
+    private static final int BACK_BUTTON_Y = HUD_Y - BACK_BUTTON_H - 23;
 
     private final GameContext context;
     private final CalibrationConfig calibrationConfig;
@@ -53,6 +69,9 @@ public class CalibrationState implements GameState {
     private volatile long playbackGeneration = 0L;
 
     private boolean paused = false;
+
+    private boolean backButtonHovered = false;
+    private boolean backButtonPressed = false;
 
     private volatile long songStartNano = 0L;
     private long pauseStartNano = 0L;
@@ -100,6 +119,9 @@ public class CalibrationState implements GameState {
         pauseStartNano = 0L;
         timelineTime = -LEAD_IN;
 
+        backButtonHovered = false;
+        backButtonPressed = false;
+
         long now = System.nanoTime();
         songStartNano = now + (long) (LEAD_IN * 1_000_000_000L);
 
@@ -144,8 +166,8 @@ public class CalibrationState implements GameState {
     public void keyPressed(KeyEvent e) {
         int keyCode = e.getKeyCode();
 
-        if (keyCode == KeyEvent.VK_ESCAPE) {
-            context.changeState(new LevelSelectState(context));
+        if (keyCode == KeyEvent.VK_ESCAPE || keyCode == KeyEvent.VK_ENTER) {
+            backToLevelSelect();
             return;
         }
 
@@ -163,8 +185,13 @@ public class CalibrationState implements GameState {
             return;
         }
 
-        if (keyCode == KeyEvent.VK_ENTER) {
-            context.changeState(new LevelSelectState(context));
+        if (keyCode == KeyEvent.VK_BACK_SPACE) {
+            removeLastHitMarker();
+            return;
+        }
+
+        if (keyCode == KeyEvent.VK_DELETE) {
+            clearHitMarkers();
             return;
         }
 
@@ -199,6 +226,43 @@ public class CalibrationState implements GameState {
         if (inputLane != null) {
             setLanePressed(inputLane, false);
         }
+    }
+
+    @Override
+    public void mouseMoved(MouseEvent e) {
+        backButtonHovered = getBackButtonBounds().contains(e.getPoint());
+    }
+
+    @Override
+    public void mouseDragged(MouseEvent e) {
+        mouseMoved(e);
+    }
+
+    @Override
+    public void mousePressed(MouseEvent e) {
+        if (e.getButton() != MouseEvent.BUTTON1) {
+            return;
+        }
+
+        backButtonPressed = getBackButtonBounds().contains(e.getPoint());
+    }
+
+    @Override
+    public void mouseReleased(MouseEvent e) {
+        if (e.getButton() != MouseEvent.BUTTON1) {
+            backButtonPressed = false;
+            return;
+        }
+
+        Point point = e.getPoint();
+
+        if (backButtonPressed && getBackButtonBounds().contains(point)) {
+            backButtonPressed = false;
+            backToLevelSelect();
+            return;
+        }
+
+        backButtonPressed = false;
     }
 
     void preload() {
@@ -317,6 +381,10 @@ public class CalibrationState implements GameState {
         }
     }
 
+    private void backToLevelSelect() {
+        context.changeState(new LevelSelectState(context));
+    }
+
     private void drawBackground(Graphics2D g) {
         if (background != null) {
             g.drawImage(background, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, null);
@@ -422,21 +490,24 @@ public class CalibrationState implements GameState {
         Graphics2D g2 = (Graphics2D) g.create();
         try {
             for (OrbitHitMarker marker : hitMarkers) {
-                float progress = (float) (1.0 - (marker.life / marker.maxLife));
-                float alpha = (float) Math.max(0.0, marker.life / marker.maxLife);
+                double progress = marker.age / marker.shrinkDuration;
+                progress = Math.max(0.0, Math.min(1.0, progress));
 
-                int radius = HIT_MARKER_BASE_RADIUS + Math.round(HIT_MARKER_EXPAND_RADIUS * progress);
+                int radius = (int) Math.round(
+                        HIT_MARKER_START_RADIUS
+                                + (HIT_MARKER_FINAL_RADIUS - HIT_MARKER_START_RADIUS) * progress
+                );
 
                 int x = centerX + (int) Math.round(Math.cos(marker.angle) * ORBIT_RADIUS);
                 int y = centerY + (int) Math.round(Math.sin(marker.angle) * ORBIT_RADIUS);
 
-                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha * 0.90f));
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.90f));
                 g2.setColor(Color.WHITE);
                 g2.setStroke(new BasicStroke(3f));
                 g2.drawOval(x - radius, y - radius, radius * 2, radius * 2);
 
-                int innerRadius = Math.max(6, radius / 3);
-                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha * 0.35f));
+                int innerRadius = Math.max(5, radius / 3);
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
                 g2.setColor(getLaneMarkerColor(marker.lane));
                 g2.fillOval(x - innerRadius, y - innerRadius, innerRadius * 2, innerRadius * 2);
             }
@@ -461,16 +532,27 @@ public class CalibrationState implements GameState {
     }
 
     private void addHitMarkerAtCurrentOrbitPosition(Lane lane) {
-        hitMarkers.add(new OrbitHitMarker(lane, getRotationAngle(), HIT_MARKER_LIFETIME));
+        hitMarkers.add(new OrbitHitMarker(lane, getRotationAngle(), HIT_MARKER_SHRINK_DURATION));
+    }
+
+    private void removeLastHitMarker() {
+        if (hitMarkers.isEmpty()) {
+            return;
+        }
+
+        hitMarkers.remove(hitMarkers.size() - 1);
+    }
+
+    private void clearHitMarkers() {
+        hitMarkers.clear();
     }
 
     private void updateHitMarkers(double deltaTime) {
-        for (int i = hitMarkers.size() - 1; i >= 0; i--) {
-            OrbitHitMarker marker = hitMarkers.get(i);
-            marker.life -= deltaTime;
+        for (OrbitHitMarker marker : hitMarkers) {
+            marker.age += deltaTime;
 
-            if (marker.life <= 0.0) {
-                hitMarkers.remove(i);
+            if (marker.age > marker.shrinkDuration) {
+                marker.age = marker.shrinkDuration;
             }
         }
     }
@@ -492,50 +574,101 @@ public class CalibrationState implements GameState {
     private void drawHud(Graphics2D g) {
         Graphics2D g2 = (Graphics2D) g.create();
         try {
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
             g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.90f));
             g2.setColor(new Color(0, 0, 0, 170));
-            g2.fillRoundRect(660, 70, 300, 430, 30, 30);
+            g2.fillRoundRect(HUD_X, HUD_Y, HUD_W, HUD_H, 30, 30);
+
+            drawBackButton(g2);
+
+            g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
+
+            int textX = HUD_X + HUD_PAD_X;
 
             g2.setColor(Color.WHITE);
-            g2.setFont(new Font("Arial", Font.BOLD, 34));
-            RenderUtils.drawCenteredString(g2, "OFFSET CALIBRATION", 660, 95, 300, 38);
+            g2.setFont(new Font("Arial", Font.BOLD, 28));
+            g2.drawString("CALIBRATION", textX, HUD_Y + 54);
 
-            g2.setFont(new Font("Arial", Font.PLAIN, 22));
-            g2.drawString(String.format("BPM: %.3f", bpm), 690, 165);
-            g2.drawString(String.format("Song Offset: %+.3f s", musicOffsetSeconds), 690, 200);
-            g2.drawString(String.format("Global Offset: %+.1f ms", context.getGlobalOffset() * 1000.0), 690, 235);
-
-            g2.drawString(String.format("Rotation: %.1f beats / turn", rotationBeats), 690, 270);
+            g2.setFont(new Font("Arial", Font.PLAIN, 20));
+            g2.drawString(String.format("BPM: %.3f", bpm), textX, HUD_Y + 105);
+            g2.drawString(String.format("Global: %+.1f ms", context.getGlobalOffset() * 1000.0), textX, HUD_Y + 139);
 
             double beatNow = getCurrentBeatPosition();
-            g2.drawString(String.format("Beat Position: %.3f", beatNow), 690, 305);
+            g2.drawString(String.format("Beat: %.3f", beatNow), textX, HUD_Y + 173);
 
             String playbackText;
             if (timelineTime < 0.0) {
-                playbackText = String.format("Starting in %.2f s", -timelineTime);
+                playbackText = String.format("Start in %.2f s", -timelineTime);
             } else if (paused) {
                 playbackText = "Paused";
             } else {
-                playbackText = String.format("Playback: %.2f s", timelineTime);
+                playbackText = String.format("Time: %.2f s", timelineTime);
             }
-            g2.drawString(playbackText, 690, 340);
+            g2.drawString(playbackText, textX, HUD_Y + 207);
 
-            g2.setFont(new Font("Arial", Font.BOLD, 22));
+            g2.setFont(new Font("Arial", Font.BOLD, 20));
             g2.setColor(new Color(120, 220, 255));
-            g2.drawString("Controls", 690, 395);
+            g2.drawString("Controls", textX, HUD_Y + 263);
 
-            g2.setFont(new Font("Arial", Font.PLAIN, 18));
+            g2.setFont(new Font("Arial", Font.PLAIN, 15));
             g2.setColor(Color.WHITE);
-            g2.drawString("Lane Key : Leave hit circle", 690, 430);
-            g2.drawString("Left / Right : -1ms / +1ms", 690, 455);
-            g2.drawString("Shift + Arrow : -10ms / +10ms", 690, 480);
-            g2.drawString("Space : Pause / Resume", 690, 505);
-            g2.drawString("R : Restart", 690, 530);
-            g2.drawString("Enter or ESC : Exit", 690, 555);
+            g2.drawString("Lane Key : leave marker", textX, HUD_Y + 294);
+            g2.drawString("Backspace : undo marker", textX, HUD_Y + 319);
+            g2.drawString("Delete : clear markers", textX, HUD_Y + 344);
+            g2.drawString("← / → : offset ±1ms", textX, HUD_Y + 369);
+            g2.drawString("Shift + ← / → : ±10ms", textX, HUD_Y + 394);
+            g2.drawString("Space : pause,  R : restart", textX, HUD_Y + 419);
 
         } finally {
             g2.dispose();
         }
+    }
+
+    private void drawBackButton(Graphics2D g) {
+        Rectangle bounds = getBackButtonBounds();
+
+        Color fill;
+        Color border;
+        Color text;
+
+        if (backButtonPressed) {
+            fill = new Color(40, 115, 170, 235);
+            border = new Color(210, 245, 255, 255);
+            text = Color.WHITE;
+        } else if (backButtonHovered) {
+            fill = new Color(70, 145, 205, 220);
+            border = new Color(190, 235, 255, 245);
+            text = Color.WHITE;
+        } else {
+            fill = new Color(20, 25, 35, 220);
+            border = new Color(130, 190, 230, 210);
+            text = new Color(235, 248, 255);
+        }
+
+        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
+
+        g.setColor(new Color(0, 0, 0, 130));
+        g.fillRoundRect(bounds.x + 2, bounds.y + 3, bounds.width, bounds.height, 12, 12);
+
+        g.setColor(fill);
+        g.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 12, 12);
+
+        g.setStroke(new BasicStroke(2f));
+        g.setColor(border);
+        g.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 12, 12);
+
+        g.setFont(new Font("Arial", Font.BOLD, 14));
+
+        g.setColor(new Color(0, 0, 0, 130));
+        RenderUtils.drawCenteredString(g, "BACK", bounds.x + 1, bounds.y + 6, bounds.width, 18);
+
+        g.setColor(text);
+        RenderUtils.drawCenteredString(g, "BACK", bounds.x, bounds.y + 5, bounds.width, 18);
+    }
+
+    private Rectangle getBackButtonBounds() {
+        return new Rectangle(BACK_BUTTON_X, BACK_BUTTON_Y, BACK_BUTTON_W, BACK_BUTTON_H);
     }
 
     private double getCurrentBeatPosition() {
@@ -590,14 +723,14 @@ public class CalibrationState implements GameState {
     private static class OrbitHitMarker {
         private final Lane lane;
         private final double angle;
-        private final double maxLife;
-        private double life;
+        private final double shrinkDuration;
+        private double age;
 
-        private OrbitHitMarker(Lane lane, double angle, double life) {
+        private OrbitHitMarker(Lane lane, double angle, double shrinkDuration) {
             this.lane = lane;
             this.angle = angle;
-            this.life = life;
-            this.maxLife = life;
+            this.shrinkDuration = shrinkDuration;
+            this.age = 0.0;
         }
     }
 }
