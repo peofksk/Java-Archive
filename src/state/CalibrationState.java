@@ -48,6 +48,10 @@ public class CalibrationState implements GameState {
     private boolean preloaded = false;
     private volatile boolean musicThreadStarted = false;
     private volatile boolean audioStarted = false;
+    private volatile boolean exiting = false;
+
+    private volatile long playbackGeneration = 0L;
+
     private boolean paused = false;
 
     private volatile long songStartNano = 0L;
@@ -79,6 +83,8 @@ public class CalibrationState implements GameState {
     public void enter() {
         context.bgm.stop();
 
+        exiting = false;
+
         if (!preloaded) {
             preload();
         } else {
@@ -97,12 +103,16 @@ public class CalibrationState implements GameState {
         long now = System.nanoTime();
         songStartNano = now + (long) (LEAD_IN * 1_000_000_000L);
 
-        startScheduledMusicThread();
+        playbackGeneration++;
+        startScheduledMusicThread(playbackGeneration);
     }
 
     @Override
     public void exit() {
-    	context.saveSettings();
+        exiting = true;
+        playbackGeneration++;
+
+        context.saveSettings();
         context.bgm.stop();
     }
 
@@ -113,10 +123,6 @@ public class CalibrationState implements GameState {
         }
 
         updateHitMarkers(deltaTime);
-
-        if (!paused && audioStarted && !context.bgm.isPlaying() && timelineTime > 0) {
-            restartPlayback();
-        }
     }
 
     @Override
@@ -211,7 +217,7 @@ public class CalibrationState implements GameState {
         return ((now - songStartNano) / 1_000_000_000.0) + AUDIO_OUTPUT_LATENCY;
     }
 
-    private void startScheduledMusicThread() {
+    private void startScheduledMusicThread(long generation) {
         if (musicThreadStarted) {
             return;
         }
@@ -221,6 +227,10 @@ public class CalibrationState implements GameState {
         Thread thread = new Thread(() -> {
             try {
                 while (true) {
+                    if (exiting || generation != playbackGeneration) {
+                        return;
+                    }
+
                     long playRequestNano = songStartNano - (long) (AUDIO_OUTPUT_LATENCY * 1_000_000_000L);
                     long now = System.nanoTime();
                     long remain = playRequestNano - now;
@@ -241,6 +251,10 @@ public class CalibrationState implements GameState {
                     }
                 }
 
+                if (exiting || generation != playbackGeneration) {
+                    return;
+                }
+
                 context.bgm.playLoaded(false);
                 audioStarted = true;
 
@@ -254,6 +268,8 @@ public class CalibrationState implements GameState {
     }
 
     private void restartPlayback() {
+        playbackGeneration++;
+
         context.bgm.stop();
         context.bgm.load(calibrationConfig.getMusicPath());
 
@@ -269,10 +285,14 @@ public class CalibrationState implements GameState {
         long now = System.nanoTime();
         songStartNano = now + (long) (LEAD_IN * 1_000_000_000L);
 
-        startScheduledMusicThread();
+        startScheduledMusicThread(playbackGeneration);
     }
 
     private void pausePlayback() {
+        if (paused) {
+            return;
+        }
+
         paused = true;
         pauseStartNano = System.nanoTime();
 
@@ -282,6 +302,10 @@ public class CalibrationState implements GameState {
     }
 
     private void resumePlayback() {
+        if (!paused) {
+            return;
+        }
+
         long now = System.nanoTime();
         long pausedDuration = now - pauseStartNano;
 
@@ -540,11 +564,11 @@ public class CalibrationState implements GameState {
     }
 
     private void initializeLanePressedMap() {
-    	lanePressed.clear();
+        lanePressed.clear();
 
-    	for (Lane lane : context.getPlayableLanes()) {
-    		lanePressed.put(lane, false);
-    	}
+        for (Lane lane : context.getPlayableLanes()) {
+            lanePressed.put(lane, false);
+        }
     }
 
     private boolean isLanePressed(Lane lane) {
@@ -556,11 +580,11 @@ public class CalibrationState implements GameState {
     }
 
     private void clearLanePressedStates() {
-    	lanePressed.clear();
+        lanePressed.clear();
 
-    	for (Lane lane : context.getPlayableLanes()) {
-    		lanePressed.put(lane, false);
-    	}
+        for (Lane lane : context.getPlayableLanes()) {
+            lanePressed.put(lane, false);
+        }
     }
 
     private static class OrbitHitMarker {
