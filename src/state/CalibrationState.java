@@ -75,6 +75,7 @@ public class CalibrationState implements GameState {
 
     private volatile long songStartNano = 0L;
     private long pauseStartNano = 0L;
+    private double pausedTimelineTime = -LEAD_IN;
 
     private double timelineTime = -LEAD_IN;
 
@@ -117,6 +118,7 @@ public class CalibrationState implements GameState {
         audioStarted = false;
         musicThreadStarted = false;
         pauseStartNano = 0L;
+        pausedTimelineTime = -LEAD_IN;
         timelineTime = -LEAD_IN;
 
         backButtonHovered = false;
@@ -344,6 +346,7 @@ public class CalibrationState implements GameState {
         audioStarted = false;
         musicThreadStarted = false;
         pauseStartNano = 0L;
+        pausedTimelineTime = -LEAD_IN;
         timelineTime = -LEAD_IN;
 
         long now = System.nanoTime();
@@ -356,6 +359,9 @@ public class CalibrationState implements GameState {
         if (paused) {
             return;
         }
+
+        pausedTimelineTime = getScheduledPlaybackTime();
+        timelineTime = pausedTimelineTime;
 
         paused = true;
         pauseStartNano = System.nanoTime();
@@ -371,10 +377,11 @@ public class CalibrationState implements GameState {
         }
 
         long now = System.nanoTime();
-        long pausedDuration = now - pauseStartNano;
 
-        songStartNano += pausedDuration;
+        songStartNano = now - (long) ((pausedTimelineTime - AUDIO_OUTPUT_LATENCY) * 1_000_000_000L);
+
         paused = false;
+        pauseStartNano = 0L;
 
         if (context.bgm.isPaused()) {
             context.bgm.resume();

@@ -1,11 +1,14 @@
 package state;
 
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
@@ -38,10 +41,16 @@ public class ShopState implements GameState {
 	private static final int CURRENT_Y = PANEL_Y + 335;
 	private static final int GUIDE_Y = PANEL_Y + 375;
 
-	private static final int BACK_W = 72;
-	private static final int BACK_H = 28;
-	private static final int BACK_X = PANEL_X + PANEL_W - BACK_W - 40;
-	private static final int BACK_Y = PANEL_Y + 18;
+	// 기존 ShopState BACK 버튼 위치 중심을 유지한 값
+	private static final int OLD_BACK_W = 72;
+	private static final int OLD_BACK_H = 28;
+	private static final int OLD_BACK_X = PANEL_X + PANEL_W - OLD_BACK_W - 40;
+	private static final int OLD_BACK_Y = PANEL_Y + 18;
+
+	private static final int BACK_BUTTON_W = 96;
+	private static final int BACK_BUTTON_H = 36;
+	private static final int BACK_BUTTON_X = OLD_BACK_X - (BACK_BUTTON_W - OLD_BACK_W) / 2;
+	private static final int BACK_BUTTON_Y = OLD_BACK_Y - (BACK_BUTTON_H - OLD_BACK_H) / 2;
 
 	private final GameContext context;
 	private final AssetManager am = AssetManager.getInstance();
@@ -51,7 +60,9 @@ public class ShopState implements GameState {
 
 	private boolean preloaded = false;
 	private int hoveredIndex = -1;
-	private boolean backHovered = false;
+
+	private boolean backButtonHovered = false;
+	private boolean backButtonPressed = false;
 
 	public ShopState(GameContext context) {
 		this.context = context;
@@ -82,6 +93,10 @@ public class ShopState implements GameState {
 			preload();
 		}
 
+		hoveredIndex = -1;
+		backButtonHovered = false;
+		backButtonPressed = false;
+
 		context.bgm.playLoaded(true);
 	}
 
@@ -102,13 +117,12 @@ public class ShopState implements GameState {
 		Color textColor = new Color(116, 102, 88);
 		Color selectedTextColor = new Color(88, 164, 203);
 		Color hoverColor = new Color(160, 190, 210);
-		Color backColor = backHovered ? new Color(88, 164, 203) : textColor;
 
 		g.setColor(titleColor);
 		g.setFont(new Font("SansSerif", Font.BOLD, 28));
 		RenderUtils.drawCenteredString(g, "Select Note Skin", PANEL_X, TITLE_Y, PANEL_W, 32);
 
-		drawBackButton(g, backColor);
+		drawBackButton(g);
 
 		for (int i = 0; i < context.getNoteCount(); i++) {
 			drawNoteCell(g, i, textColor, selectedTextColor, hoverColor);
@@ -130,12 +144,61 @@ public class ShopState implements GameState {
 		);
 	}
 
-	private void drawBackButton(Graphics2D g, Color color) {
-		g.setColor(color);
-		g.drawRoundRect(BACK_X, BACK_Y, BACK_W, BACK_H, 12, 12);
+	private void drawBackButton(Graphics2D g) {
+		Graphics2D g2 = (Graphics2D) g.create();
 
-		g.setFont(new Font("SansSerif", Font.BOLD, 13));
-		RenderUtils.drawCenteredString(g, "BACK", BACK_X, BACK_Y + 4, BACK_W, 18);
+		try {
+			g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+			Rectangle bounds = getBackButtonBounds();
+
+			Color fill;
+			Color border;
+			Color text;
+
+			if (backButtonPressed) {
+				fill = new Color(35, 105, 165, 230);
+				border = new Color(210, 245, 255, 255);
+				text = Color.WHITE;
+			} else if (backButtonHovered) {
+				fill = new Color(70, 145, 205, 210);
+				border = new Color(190, 235, 255, 245);
+				text = Color.WHITE;
+			} else {
+				fill = new Color(0, 0, 0, 135);
+				border = new Color(130, 190, 230, 210);
+				text = new Color(235, 248, 255);
+			}
+
+			g2.setColor(new Color(0, 0, 0, 120));
+			g2.fillRoundRect(bounds.x + 3, bounds.y + 4, bounds.width, bounds.height, 14, 14);
+
+			g2.setColor(fill);
+			g2.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 14, 14);
+
+			g2.setStroke(new BasicStroke(2f));
+			g2.setColor(border);
+			g2.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 14, 14);
+
+			g2.setFont(new Font("Arial", Font.BOLD, 16));
+			drawCenteredString(g2, "BACK", bounds, text);
+
+		} finally {
+			g2.dispose();
+		}
+	}
+
+	private void drawCenteredString(Graphics2D g, String text, Rectangle bounds, Color color) {
+		FontMetrics fm = g.getFontMetrics();
+
+		int textX = bounds.x + (bounds.width - fm.stringWidth(text)) / 2;
+		int textY = bounds.y + ((bounds.height - fm.getHeight()) / 2) + fm.getAscent();
+
+		g.setColor(new Color(0, 0, 0, 130));
+		g.drawString(text, textX + 1, textY + 1);
+
+		g.setColor(color);
+		g.drawString(text, textX, textY);
 	}
 
 	private void drawNoteCell(
@@ -240,8 +303,8 @@ public class ShopState implements GameState {
 
 		Point point = e.getPoint();
 
-		if (isBackButtonAt(point.x, point.y)) {
-			backToLevelSelect();
+		backButtonPressed = getBackButtonBounds().contains(point);
+		if (backButtonPressed) {
 			return;
 		}
 
@@ -252,11 +315,29 @@ public class ShopState implements GameState {
 	}
 
 	@Override
+	public void mouseReleased(MouseEvent e) {
+		if (e.getButton() != MouseEvent.BUTTON1) {
+			backButtonPressed = false;
+			return;
+		}
+
+		Point point = e.getPoint();
+
+		if (backButtonPressed && getBackButtonBounds().contains(point)) {
+			backButtonPressed = false;
+			backToLevelSelect();
+			return;
+		}
+
+		backButtonPressed = false;
+	}
+
+	@Override
 	public void mouseMoved(MouseEvent e) {
 		Point point = e.getPoint();
 
 		hoveredIndex = getNoteIndexAt(point.x, point.y);
-		backHovered = isBackButtonAt(point.x, point.y);
+		backButtonHovered = getBackButtonBounds().contains(point);
 	}
 
 	@Override
@@ -329,11 +410,8 @@ public class ShopState implements GameState {
 		return new Rectangle(cellX, cellY, CELL_W, CELL_H);
 	}
 
-	private boolean isBackButtonAt(int x, int y) {
-		return x >= BACK_X
-				&& x <= BACK_X + BACK_W
-				&& y >= BACK_Y
-				&& y <= BACK_Y + BACK_H;
+	private Rectangle getBackButtonBounds() {
+		return new Rectangle(BACK_BUTTON_X, BACK_BUTTON_Y, BACK_BUTTON_W, BACK_BUTTON_H);
 	}
 
 	private void backToLevelSelect() {
@@ -343,5 +421,9 @@ public class ShopState implements GameState {
 	@Override
 	public void exit() {
 		context.saveSettings();
+
+		hoveredIndex = -1;
+		backButtonHovered = false;
+		backButtonPressed = false;
 	}
 }

@@ -31,6 +31,11 @@ public class LevelSelectState implements GameState {
 	private static final int MENU_H = 34;
 	private static final int MENU_GAP = 8;
 
+	private static final int BACK_BUTTON_W = 96;
+	private static final int BACK_BUTTON_H = 36;
+	private static final int BACK_BUTTON_X = 1024 - BACK_BUTTON_W - 36;
+	private static final int BACK_BUTTON_Y = 34;
+
 	private final GameContext context;
 	private final AssetManager am = AssetManager.getInstance();
 
@@ -48,6 +53,9 @@ public class LevelSelectState implements GameState {
 
 	private int hoveredMenuButton = -1;
 	private int pressedMenuButton = -1;
+
+	private boolean backButtonHovered = false;
+	private boolean backButtonPressed = false;
 
 	private boolean leftArrowHovered = false;
 	private boolean rightArrowHovered = false;
@@ -77,6 +85,8 @@ public class LevelSelectState implements GameState {
 
 		hoveredMenuButton = -1;
 		pressedMenuButton = -1;
+		backButtonHovered = false;
+		backButtonPressed = false;
 
 		playSample();
 	}
@@ -118,6 +128,8 @@ public class LevelSelectState implements GameState {
 		if (mode == Mode.DIFFICULTY_SELECT) {
 			drawDifficultySelect(g);
 		}
+
+		drawBackButton(g);
 	}
 
 	private void drawMenuButtons(Graphics2D g) {
@@ -168,19 +180,6 @@ public class LevelSelectState implements GameState {
 
 		g.setFont(new Font("SansSerif", Font.BOLD, 15));
 		drawCenteredString(g, text, bounds, textColor);
-	}
-
-	private void drawCenteredString(Graphics2D g, String text, Rectangle bounds, Color color) {
-		FontMetrics fm = g.getFontMetrics();
-
-		int textX = bounds.x + (bounds.width - fm.stringWidth(text)) / 2;
-		int textY = bounds.y + ((bounds.height - fm.getHeight()) / 2) + fm.getAscent();
-
-		g.setColor(new Color(0, 0, 0, 120));
-		g.drawString(text, textX + 2, textY + 2);
-
-		g.setColor(color);
-		g.drawString(text, textX, textY);
 	}
 
 	private void drawDifficultySelect(Graphics2D g) {
@@ -235,11 +234,68 @@ public class LevelSelectState implements GameState {
 		}
 	}
 
+	private void drawBackButton(Graphics2D g) {
+		Graphics2D g2 = (Graphics2D) g.create();
+
+		try {
+			g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+			Rectangle bounds = getBackButtonBounds();
+
+			Color fill;
+			Color border;
+			Color text;
+
+			if (backButtonPressed) {
+				fill = new Color(35, 105, 165, 230);
+				border = new Color(210, 245, 255, 255);
+				text = Color.WHITE;
+			} else if (backButtonHovered) {
+				fill = new Color(70, 145, 205, 210);
+				border = new Color(190, 235, 255, 245);
+				text = Color.WHITE;
+			} else {
+				fill = new Color(0, 0, 0, 135);
+				border = new Color(130, 190, 230, 210);
+				text = new Color(235, 248, 255);
+			}
+
+			g2.setColor(new Color(0, 0, 0, 120));
+			g2.fillRoundRect(bounds.x + 3, bounds.y + 4, bounds.width, bounds.height, 14, 14);
+
+			g2.setColor(fill);
+			g2.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 14, 14);
+
+			g2.setStroke(new BasicStroke(2f));
+			g2.setColor(border);
+			g2.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 14, 14);
+
+			g2.setFont(new Font("Arial", Font.BOLD, 16));
+			drawCenteredString(g2, "BACK", bounds, text);
+
+		} finally {
+			g2.dispose();
+		}
+	}
+
+	private void drawCenteredString(Graphics2D g, String text, Rectangle bounds, Color color) {
+		FontMetrics fm = g.getFontMetrics();
+
+		int textX = bounds.x + (bounds.width - fm.stringWidth(text)) / 2;
+		int textY = bounds.y + ((bounds.height - fm.getHeight()) / 2) + fm.getAscent();
+
+		g.setColor(new Color(0, 0, 0, 130));
+		g.drawString(text, textX + 1, textY + 1);
+
+		g.setColor(color);
+		g.drawString(text, textX, textY);
+	}
+
 	@Override
 	public void keyPressed(KeyEvent e) {
 		if (mode == Mode.LEVEL_SELECT) {
 			if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
-				context.changeState(new IntroState(context));
+				backToIntro();
 				return;
 			}
 
@@ -303,12 +359,13 @@ public class LevelSelectState implements GameState {
 
 	@Override
 	public void mouseMoved(MouseEvent e) {
+		backButtonHovered = getBackButtonBounds().contains(e.getPoint());
 		updateHoverState(e.getPoint());
 	}
 
 	@Override
 	public void mouseDragged(MouseEvent e) {
-		updateHoverState(e.getPoint());
+		mouseMoved(e);
 	}
 
 	@Override
@@ -319,9 +376,13 @@ public class LevelSelectState implements GameState {
 
 		Point point = e.getPoint();
 
+		backButtonPressed = getBackButtonBounds().contains(point);
+		if (backButtonPressed) {
+			return;
+		}
+
 		if (mode == Mode.LEVEL_SELECT) {
 			pressedMenuButton = getMenuButtonIndexAt(point);
-
 			if (pressedMenuButton >= 0) {
 				return;
 			}
@@ -331,11 +392,21 @@ public class LevelSelectState implements GameState {
 	@Override
 	public void mouseReleased(MouseEvent e) {
 		if (e.getButton() != MouseEvent.BUTTON1) {
+			backButtonPressed = false;
 			pressedMenuButton = -1;
 			return;
 		}
 
 		Point point = e.getPoint();
+
+		if (backButtonPressed && getBackButtonBounds().contains(point)) {
+			backButtonPressed = false;
+			pressedMenuButton = -1;
+			backToIntro();
+			return;
+		}
+
+		backButtonPressed = false;
 
 		if (mode == Mode.LEVEL_SELECT) {
 			int releasedMenuButton = getMenuButtonIndexAt(point);
@@ -427,6 +498,10 @@ public class LevelSelectState implements GameState {
 		return new Rectangle(MENU_X, y, MENU_W, MENU_H);
 	}
 
+	private Rectangle getBackButtonBounds() {
+		return new Rectangle(BACK_BUTTON_X, BACK_BUTTON_Y, BACK_BUTTON_W, BACK_BUTTON_H);
+	}
+
 	private Rectangle getLeftArrowBounds() {
 		return new Rectangle(55, 195, 190, 170);
 	}
@@ -516,6 +591,10 @@ public class LevelSelectState implements GameState {
 		context.changeState(new LoadState(context, "Loading Game...", () -> next.preload(), () -> next));
 	}
 
+	private void backToIntro() {
+		context.changeState(new IntroState(context));
+	}
+
 	@Override
 	public void keyReleased(KeyEvent e) {
 	}
@@ -524,5 +603,8 @@ public class LevelSelectState implements GameState {
 	public void exit() {
 		hoveredMenuButton = -1;
 		pressedMenuButton = -1;
+
+		backButtonHovered = false;
+		backButtonPressed = false;
 	}
 }

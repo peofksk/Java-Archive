@@ -39,6 +39,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JRootPane;
+import javax.swing.JScrollBar;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
@@ -51,6 +52,9 @@ import stage.StageManager;
 import state.gameplay.KeyMode;
 
 public class ChartEditor extends JFrame {
+
+	private static final int SCROLL_SCALE = 1000;
+	private static final double MAX_SCROLL_BEATS = 2048.0;
 
 	private final LanePanel lanePanel;
 	private final Timer playbackTimer;
@@ -68,6 +72,9 @@ public class ChartEditor extends JFrame {
 	private JTextField startBeatField;
 	private JLabel musicLabel;
 
+	private JScrollBar beatScrollBar;
+	private boolean updatingScrollBar = false;
+
 	private Clip audioClip;
 	private double playbackStartBeat = 0.0;
 	private boolean updatingPresetSelectors = false;
@@ -79,11 +86,12 @@ public class ChartEditor extends JFrame {
 		setLayout(new BorderLayout());
 
 		lanePanel = new LanePanel();
+		lanePanel.addMouseWheelListener(e -> SwingUtilities.invokeLater(this::syncScrollBarToLanePanel));
 
 		preloadStageAssets();
 
 		add(createTopPanel(), BorderLayout.NORTH);
-		add(lanePanel, BorderLayout.CENTER);
+		add(createEditorPanel(), BorderLayout.CENTER);
 
 		playbackTimer = new Timer(16, e -> updatePlaybackLine());
 
@@ -200,6 +208,7 @@ public class ChartEditor extends JFrame {
 		clearButton.addActionListener(e -> {
 			lanePanel.clearNotes();
 			updatePresetStatusLabel();
+			syncScrollBarToLanePanel();
 		});
 
 		stageCombo.addActionListener(e -> {
@@ -266,6 +275,58 @@ public class ChartEditor extends JFrame {
 
 		registerKeyboardShortcuts(overwritePresetButton);
 		return wrapper;
+	}
+
+	private JPanel createEditorPanel() {
+		JPanel panel = new JPanel(new BorderLayout());
+
+		panel.add(lanePanel, BorderLayout.CENTER);
+
+		int extent = (int) Math.round(8.0 * SCROLL_SCALE);
+		int maximum = (int) Math.round(MAX_SCROLL_BEATS * SCROLL_SCALE) + extent;
+
+		beatScrollBar = new JScrollBar(
+				JScrollBar.VERTICAL,
+				0,
+				extent,
+				0,
+				maximum
+		);
+
+		beatScrollBar.setUnitIncrement((int) Math.round(0.25 * SCROLL_SCALE));
+		beatScrollBar.setBlockIncrement((int) Math.round(4.0 * SCROLL_SCALE));
+
+		beatScrollBar.addAdjustmentListener(e -> {
+			if (updatingScrollBar) {
+				return;
+			}
+
+			double scrollBeats = beatScrollBar.getValue() / (double) SCROLL_SCALE;
+			lanePanel.setScrollOffsetBeats(scrollBeats);
+			lanePanel.repaint();
+		});
+
+		panel.add(beatScrollBar, BorderLayout.EAST);
+
+		return panel;
+	}
+
+	private void syncScrollBarToLanePanel() {
+		if (beatScrollBar == null) {
+			return;
+		}
+
+		updatingScrollBar = true;
+
+		int value = (int) Math.round(lanePanel.getScrollOffsetBeats() * SCROLL_SCALE);
+		int min = beatScrollBar.getMinimum();
+		int max = beatScrollBar.getMaximum() - beatScrollBar.getVisibleAmount();
+
+		value = Math.max(min, Math.min(value, max));
+
+		beatScrollBar.setValue(value);
+
+		updatingScrollBar = false;
 	}
 
 	private void registerKeyboardShortcuts(JButton overwritePresetButton) {
@@ -423,6 +484,9 @@ public class ChartEditor extends JFrame {
 			lanePanel.clearNotes();
 		}
 
+		lanePanel.setScrollOffsetBeats(0.0);
+		syncScrollBarToLanePanel();
+
 		byte[] musicBytes = preloadedMusicBytes.get(preset.stage.getLevelName());
 		if (musicBytes != null) {
 			try {
@@ -453,6 +517,8 @@ public class ChartEditor extends JFrame {
 
 		if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
 			lanePanel.loadChart(chooser.getSelectedFile());
+			lanePanel.setScrollOffsetBeats(0.0);
+			syncScrollBarToLanePanel();
 			updatePresetStatusLabel();
 		}
 	}
@@ -502,8 +568,7 @@ public class ChartEditor extends JFrame {
 					JOptionPane.INFORMATION_MESSAGE);
 
 		} catch (Exception e) {
-			JOptionPane.showMessageDialog(this, "프리셋 덮어쓰기 실패: " + e.getMessage(), "Error",
-					JOptionPane.ERROR_MESSAGE);
+			JOptionPane.showMessageDialog(this, "프리셋 덮어쓰기 실패: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
 		}
 	}
 
@@ -578,6 +643,8 @@ public class ChartEditor extends JFrame {
 		audioClip.setMicrosecondPosition((long) (startSeconds * 1_000_000L));
 
 		lanePanel.setScrollOffsetBeats(startBeat);
+		syncScrollBarToLanePanel();
+
 		lanePanel.setPlaybackBeat(startBeat);
 		lanePanel.setPlaybackLineVisible(true);
 
@@ -611,6 +678,9 @@ public class ChartEditor extends JFrame {
 
 			audioClip.setMicrosecondPosition((long) (startSeconds * 1_000_000L));
 		}
+
+		lanePanel.setScrollOffsetBeats(playbackStartBeat);
+		syncScrollBarToLanePanel();
 
 		lanePanel.setPlaybackBeat(playbackStartBeat);
 		lanePanel.setPlaybackLineVisible(audioClip != null);

@@ -26,30 +26,34 @@ public class OptionState implements GameState {
 
 	private static final int BUTTON_KEY_MODE_4 = 0;
 	private static final int BUTTON_KEY_MODE_6 = 1;
-	private static final int BUTTON_BACK = 2;
-	private static final int BUTTON_SAVE = 3;
+	private static final int BUTTON_SAVE = 2;
 
 	private static final int LEFT_X = 475;
 	private static final int RIGHT_X = 665;
 
-	private static final int MODE_TEXT_Y = 98;
-	private static final int GUIDE_TOP_Y = 118;
+	private static final int MODE_TEXT_Y = 128;
+	private static final int GUIDE_TOP_Y = 148;
 
-	private static final int MODE_Y = 146;
+	private static final int MODE_Y = 176;
 	private static final int MODE_BUTTON_W = 175;
 	private static final int MODE_BUTTON_H = 42;
 
-	private static final int LANE_START_Y = 216;
+	private static final int LANE_START_Y = 246;
 	private static final int LANE_BUTTON_W = 175;
 	private static final int LANE_BUTTON_H = 38;
 	private static final int LANE_GAP_Y = 12;
 
-	private static final int WARNING_Y = 375;
-	private static final int GUIDE_BOTTOM_Y = 400;
+	private static final int WARNING_Y = 405;
+	private static final int GUIDE_BOTTOM_Y = 430;
 
-	private static final int BOTTOM_Y = 438;
+	private static final int BOTTOM_Y = 468;
 	private static final int BOTTOM_BUTTON_W = 175;
 	private static final int BOTTOM_BUTTON_H = 42;
+
+	private static final int BACK_BUTTON_W = 96;
+	private static final int BACK_BUTTON_H = 36;
+	private static final int BACK_BUTTON_X = 808;
+	private static final int BACK_BUTTON_Y = 94;
 
 	private final GameContext context;
 	private final AssetManager am = AssetManager.getInstance();
@@ -70,6 +74,9 @@ public class OptionState implements GameState {
 
 	private Lane hoveredLaneButton = null;
 	private Lane pressedLaneButton = null;
+
+	private boolean backButtonHovered = false;
+	private boolean backButtonPressed = false;
 
 	public OptionState(GameContext context) {
 		this.context = context;
@@ -99,10 +106,14 @@ public class OptionState implements GameState {
 		waitingKeyLane = null;
 		warningMessage = null;
 		savedNoticeVisible = false;
+
 		hoveredFixedButton = -1;
 		pressedFixedButton = -1;
 		hoveredLaneButton = null;
 		pressedLaneButton = null;
+
+		backButtonHovered = false;
+		backButtonPressed = false;
 
 		context.bgm.playLoaded(true);
 	}
@@ -145,6 +156,7 @@ public class OptionState implements GameState {
 		drawGuide(g);
 		drawButtons(g);
 		drawSavedNotice(g);
+		drawBackButton(g);
 
 		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, oldAntialiasing);
 	}
@@ -183,7 +195,6 @@ public class OptionState implements GameState {
 			drawLaneButton(g, lane);
 		}
 
-		drawFixedButton(g, BUTTON_BACK, "Back");
 		drawFixedButton(g, BUTTON_SAVE, "Save");
 	}
 
@@ -264,13 +275,57 @@ public class OptionState implements GameState {
 		drawCenteredString(g, text, bounds, textColor);
 	}
 
+	private void drawBackButton(Graphics2D g) {
+		Graphics2D g2 = (Graphics2D) g.create();
+
+		try {
+			g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+			Rectangle bounds = getBackButtonBounds();
+
+			Color fill;
+			Color border;
+			Color text;
+
+			if (backButtonPressed) {
+				fill = new Color(35, 105, 165, 230);
+				border = new Color(210, 245, 255, 255);
+				text = Color.WHITE;
+			} else if (backButtonHovered) {
+				fill = new Color(70, 145, 205, 210);
+				border = new Color(190, 235, 255, 245);
+				text = Color.WHITE;
+			} else {
+				fill = new Color(0, 0, 0, 135);
+				border = new Color(130, 190, 230, 210);
+				text = new Color(235, 248, 255);
+			}
+
+			g2.setColor(new Color(0, 0, 0, 120));
+			g2.fillRoundRect(bounds.x + 3, bounds.y + 4, bounds.width, bounds.height, 14, 14);
+
+			g2.setColor(fill);
+			g2.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 14, 14);
+
+			g2.setStroke(new BasicStroke(2f));
+			g2.setColor(border);
+			g2.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 14, 14);
+
+			g2.setFont(new Font("Arial", Font.BOLD, 16));
+			drawCenteredString(g2, "BACK", bounds, text);
+
+		} finally {
+			g2.dispose();
+		}
+	}
+
 	private void drawCenteredString(Graphics2D g, String text, Rectangle bounds, Color color) {
 		FontMetrics fm = g.getFontMetrics();
 
 		int textX = bounds.x + (bounds.width - fm.stringWidth(text)) / 2;
 		int textY = bounds.y + ((bounds.height - fm.getHeight()) / 2) + fm.getAscent();
 
-		g.setColor(new Color(0, 0, 0, 120));
+		g.setColor(new Color(0, 0, 0, 130));
 		g.drawString(text, textX + 1, textY + 1);
 
 		g.setColor(color);
@@ -283,8 +338,8 @@ public class OptionState implements GameState {
 		}
 
 		g.setColor(new Color(160, 255, 180, 230));
-		g.setFont(new Font("Dialog", Font.BOLD, 20));
-		g.drawString("Saved!", 855, 463);
+		g.setFont(new Font("Dialog", Font.BOLD, 16));
+		g.drawString("Saved!", 855, 493);
 	}
 
 	@Override
@@ -307,12 +362,13 @@ public class OptionState implements GameState {
 
 	@Override
 	public void mouseMoved(MouseEvent e) {
+		backButtonHovered = getBackButtonBounds().contains(e.getPoint());
 		updateHoverState(e.getPoint());
 	}
 
 	@Override
 	public void mouseDragged(MouseEvent e) {
-		updateHoverState(e.getPoint());
+		mouseMoved(e);
 	}
 
 	@Override
@@ -323,6 +379,11 @@ public class OptionState implements GameState {
 
 		Point point = e.getPoint();
 
+		backButtonPressed = getBackButtonBounds().contains(point);
+		if (backButtonPressed) {
+			return;
+		}
+
 		pressedFixedButton = getFixedButtonIndexAt(point);
 		pressedLaneButton = getLaneButtonAt(point);
 	}
@@ -330,11 +391,21 @@ public class OptionState implements GameState {
 	@Override
 	public void mouseReleased(MouseEvent e) {
 		if (e.getButton() != MouseEvent.BUTTON1) {
+			backButtonPressed = false;
 			clearPressedState();
 			return;
 		}
 
 		Point point = e.getPoint();
+
+		if (backButtonPressed && getBackButtonBounds().contains(point)) {
+			backButtonPressed = false;
+			clearPressedState();
+			backToLevelSelect();
+			return;
+		}
+
+		backButtonPressed = false;
 
 		int releasedFixedButton = getFixedButtonIndexAt(point);
 		Lane releasedLaneButton = getLaneButtonAt(point);
@@ -368,7 +439,6 @@ public class OptionState implements GameState {
 		int[] indexes = {
 				BUTTON_KEY_MODE_4,
 				BUTTON_KEY_MODE_6,
-				BUTTON_BACK,
 				BUTTON_SAVE
 		};
 
@@ -395,10 +465,13 @@ public class OptionState implements GameState {
 		return switch (buttonIndex) {
 			case BUTTON_KEY_MODE_4 -> new Rectangle(LEFT_X, MODE_Y, MODE_BUTTON_W, MODE_BUTTON_H);
 			case BUTTON_KEY_MODE_6 -> new Rectangle(RIGHT_X, MODE_Y, MODE_BUTTON_W, MODE_BUTTON_H);
-			case BUTTON_BACK -> new Rectangle(LEFT_X, BOTTOM_Y, BOTTOM_BUTTON_W, BOTTOM_BUTTON_H);
 			case BUTTON_SAVE -> new Rectangle(RIGHT_X, BOTTOM_Y, BOTTOM_BUTTON_W, BOTTOM_BUTTON_H);
 			default -> new Rectangle();
 		};
+	}
+
+	private Rectangle getBackButtonBounds() {
+		return new Rectangle(BACK_BUTTON_X, BACK_BUTTON_Y, BACK_BUTTON_W, BACK_BUTTON_H);
 	}
 
 	private Rectangle getLaneButtonBounds(Lane lane) {
@@ -432,7 +505,6 @@ public class OptionState implements GameState {
 		switch (buttonIndex) {
 			case BUTTON_KEY_MODE_4 -> setPendingKeyMode(4);
 			case BUTTON_KEY_MODE_6 -> setPendingKeyMode(6);
-			case BUTTON_BACK -> backToLevelSelect();
 			case BUTTON_SAVE -> saveSettings();
 		}
 	}
@@ -581,5 +653,8 @@ public class OptionState implements GameState {
 		pressedFixedButton = -1;
 		hoveredLaneButton = null;
 		pressedLaneButton = null;
+
+		backButtonHovered = false;
+		backButtonPressed = false;
 	}
 }
