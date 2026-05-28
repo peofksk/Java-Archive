@@ -46,7 +46,7 @@ public class OptionState implements GameState {
 	private static final int WARNING_Y = 405;
 	private static final int GUIDE_BOTTOM_Y = 430;
 
-	private static final int BOTTOM_Y = 468;
+	private static final int BOTTOM_Y = 438;
 	private static final int BOTTOM_BUTTON_W = 175;
 	private static final int BOTTOM_BUTTON_H = 42;
 

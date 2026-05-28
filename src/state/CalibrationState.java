@@ -29,7 +29,6 @@ public class CalibrationState implements GameState {
     private static final int SCREEN_HEIGHT = 576;
 
     private static final double LEAD_IN = 3.0;
-    private static final double AUDIO_OUTPUT_LATENCY = 0.2;
 
     private static final double DEFAULT_ROTATION_BEATS = 4.0;
     private static final double FINE_OFFSET_STEP_SECONDS = 0.001;
@@ -45,7 +44,7 @@ public class CalibrationState implements GameState {
     private static final int HUD_X = 660;
     private static final int HUD_Y = 70;
     private static final int HUD_W = 300;
-    private static final int HUD_H = 430;
+    private static final int HUD_H = 465;
 
     private static final int HUD_PAD_X = 28;
 
@@ -75,7 +74,6 @@ public class CalibrationState implements GameState {
 
     private volatile long songStartNano = 0L;
     private long pauseStartNano = 0L;
-    private double pausedTimelineTime = -LEAD_IN;
 
     private double timelineTime = -LEAD_IN;
 
@@ -96,6 +94,7 @@ public class CalibrationState implements GameState {
         this.bpm = calibrationConfig.getMusicBPM();
         this.musicOffsetSeconds = calibrationConfig.getMusicOffset();
         this.rotationBeats = rotationBeats <= 0.0 ? DEFAULT_ROTATION_BEATS : rotationBeats;
+
         initializeLanePressedMap();
     }
 
@@ -118,7 +117,6 @@ public class CalibrationState implements GameState {
         audioStarted = false;
         musicThreadStarted = false;
         pauseStartNano = 0L;
-        pausedTimelineTime = -LEAD_IN;
         timelineTime = -LEAD_IN;
 
         backButtonHovered = false;
@@ -138,6 +136,9 @@ public class CalibrationState implements GameState {
 
         context.saveSettings();
         context.bgm.stop();
+
+        backButtonHovered = false;
+        backButtonPressed = false;
     }
 
     @Override
@@ -225,6 +226,7 @@ public class CalibrationState implements GameState {
     @Override
     public void keyReleased(KeyEvent e) {
         Lane inputLane = context.getLaneForKeyCode(e.getKeyCode());
+
         if (inputLane != null) {
             setLanePressed(inputLane, false);
         }
@@ -280,7 +282,7 @@ public class CalibrationState implements GameState {
 
     private double getScheduledPlaybackTime() {
         long now = System.nanoTime();
-        return ((now - songStartNano) / 1_000_000_000.0) + AUDIO_OUTPUT_LATENCY;
+        return (now - songStartNano) / 1_000_000_000.0;
     }
 
     private void startScheduledMusicThread(long generation) {
@@ -297,17 +299,17 @@ public class CalibrationState implements GameState {
                         return;
                     }
 
-                    long playRequestNano = songStartNano - (long) (AUDIO_OUTPUT_LATENCY * 1_000_000_000L);
+                    if (paused) {
+                        Thread.sleep(1);
+                        continue;
+                    }
+
+                    long playRequestNano = songStartNano;
                     long now = System.nanoTime();
                     long remain = playRequestNano - now;
 
                     if (remain <= 0) {
                         break;
-                    }
-
-                    if (paused) {
-                        Thread.sleep(1);
-                        continue;
                     }
 
                     if (remain > 2_000_000L) {
@@ -317,7 +319,7 @@ public class CalibrationState implements GameState {
                     }
                 }
 
-                if (exiting || generation != playbackGeneration) {
+                if (exiting || generation != playbackGeneration || paused) {
                     return;
                 }
 
@@ -346,7 +348,6 @@ public class CalibrationState implements GameState {
         audioStarted = false;
         musicThreadStarted = false;
         pauseStartNano = 0L;
-        pausedTimelineTime = -LEAD_IN;
         timelineTime = -LEAD_IN;
 
         long now = System.nanoTime();
@@ -360,8 +361,7 @@ public class CalibrationState implements GameState {
             return;
         }
 
-        pausedTimelineTime = getScheduledPlaybackTime();
-        timelineTime = pausedTimelineTime;
+        updateTimelineTime();
 
         paused = true;
         pauseStartNano = System.nanoTime();
@@ -377,14 +377,20 @@ public class CalibrationState implements GameState {
         }
 
         long now = System.nanoTime();
-
-        songStartNano = now - (long) ((pausedTimelineTime - AUDIO_OUTPUT_LATENCY) * 1_000_000_000L);
+        long pausedDuration = now - pauseStartNano;
 
         paused = false;
         pauseStartNano = 0L;
 
         if (context.bgm.isPaused()) {
             context.bgm.resume();
+
+            double musicPosition = context.bgm.getPositionSeconds();
+            songStartNano = now - (long) (musicPosition * 1_000_000_000L);
+            timelineTime = getScheduledPlaybackTime();
+
+        } else if (!audioStarted) {
+            songStartNano += pausedDuration;
         }
     }
 
@@ -407,6 +413,7 @@ public class CalibrationState implements GameState {
         int centerY = 288;
 
         Graphics2D g2 = (Graphics2D) g.create();
+
         try {
             g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.82f));
             g2.setColor(new Color(0, 0, 0, 160));
@@ -460,6 +467,7 @@ public class CalibrationState implements GameState {
         int y = centerY - ORBIT_RADIUS;
 
         Graphics2D g2 = (Graphics2D) g.create();
+
         try {
             g2.setColor(Color.WHITE);
             g2.setStroke(new BasicStroke(3f));
@@ -485,6 +493,7 @@ public class CalibrationState implements GameState {
 
         g.setColor(Color.CYAN);
         g.fillOval(x - NOTE_DRAW_SIZE / 2, y - NOTE_DRAW_SIZE / 2, NOTE_DRAW_SIZE, NOTE_DRAW_SIZE);
+
         g.setColor(Color.WHITE);
         g.drawOval(x - NOTE_DRAW_SIZE / 2, y - NOTE_DRAW_SIZE / 2, NOTE_DRAW_SIZE, NOTE_DRAW_SIZE);
     }
@@ -495,6 +504,7 @@ public class CalibrationState implements GameState {
         }
 
         Graphics2D g2 = (Graphics2D) g.create();
+
         try {
             for (OrbitHitMarker marker : hitMarkers) {
                 double progress = marker.age / marker.shrinkDuration;
@@ -580,6 +590,7 @@ public class CalibrationState implements GameState {
 
     private void drawHud(Graphics2D g) {
         Graphics2D g2 = (Graphics2D) g.create();
+
         try {
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
@@ -592,17 +603,18 @@ public class CalibrationState implements GameState {
             g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
 
             int textX = HUD_X + HUD_PAD_X;
+            int contentW = HUD_W - HUD_PAD_X * 2;
 
             g2.setColor(Color.WHITE);
-            g2.setFont(new Font("Arial", Font.BOLD, 28));
-            g2.drawString("CALIBRATION", textX, HUD_Y + 54);
+            g2.setFont(new Font("Arial", Font.BOLD, 27));
+            g2.drawString("CALIBRATION", textX, HUD_Y + 50);
 
-            g2.setFont(new Font("Arial", Font.PLAIN, 20));
-            g2.drawString(String.format("BPM: %.3f", bpm), textX, HUD_Y + 105);
-            g2.drawString(String.format("Global: %+.1f ms", context.getGlobalOffset() * 1000.0), textX, HUD_Y + 139);
+            g2.setFont(new Font("Arial", Font.PLAIN, 18));
+            g2.drawString(String.format("BPM: %.3f", bpm), textX, HUD_Y + 86);
+            g2.drawString(String.format("Offset: %+.1f ms", context.getGlobalOffset() * 1000.0), textX, HUD_Y + 114);
 
             double beatNow = getCurrentBeatPosition();
-            g2.drawString(String.format("Beat: %.3f", beatNow), textX, HUD_Y + 173);
+            g2.drawString(String.format("Beat: %.3f", beatNow), textX, HUD_Y + 142);
 
             String playbackText;
             if (timelineTime < 0.0) {
@@ -612,24 +624,54 @@ public class CalibrationState implements GameState {
             } else {
                 playbackText = String.format("Time: %.2f s", timelineTime);
             }
-            g2.drawString(playbackText, textX, HUD_Y + 207);
+            g2.drawString(playbackText, textX, HUD_Y + 170);
 
-            g2.setFont(new Font("Arial", Font.BOLD, 20));
+            g2.setFont(new Font("Arial", Font.BOLD, 18));
             g2.setColor(new Color(120, 220, 255));
-            g2.drawString("Controls", textX, HUD_Y + 263);
+            g2.drawString("How to use", textX, HUD_Y + 215);
 
-            g2.setFont(new Font("Arial", Font.PLAIN, 15));
+            g2.setFont(new Font("Arial", Font.PLAIN, 14));
             g2.setColor(Color.WHITE);
-            g2.drawString("Lane Key : leave marker", textX, HUD_Y + 294);
-            g2.drawString("Backspace : undo marker", textX, HUD_Y + 319);
-            g2.drawString("Delete : clear markers", textX, HUD_Y + 344);
-            g2.drawString("← / → : offset ±1ms", textX, HUD_Y + 369);
-            g2.drawString("Shift + ← / → : ±10ms", textX, HUD_Y + 394);
-            g2.drawString("Space : pause,  R : restart", textX, HUD_Y + 419);
+
+            drawHudLine(g2, "1. Listen to the beat.", textX, HUD_Y + 243);
+            drawHudLine(g2, "2. Press any lane key on beat.", textX, HUD_Y + 266);
+            drawHudLine(g2, "3. Check where markers appear.", textX, HUD_Y + 289);
+            drawHudLine(g2, "4. Adjust until markers hit HIT.", textX, HUD_Y + 312);
+
+            g2.setColor(new Color(255, 230, 130));
+            g2.setFont(new Font("Arial", Font.BOLD, 13));
+            RenderUtils.drawCenteredString(
+                    g2,
+                    "Goal: markers should land near HIT",
+                    textX,
+                    HUD_Y + 323,
+                    contentW,
+                    20
+            );
+
+            g2.setFont(new Font("Arial", Font.BOLD, 18));
+            g2.setColor(new Color(120, 220, 255));
+            g2.drawString("Controls", textX, HUD_Y + 355);
+
+            g2.setFont(new Font("Arial", Font.PLAIN, 14));
+            g2.setColor(Color.WHITE);
+
+            drawHudLine(g2, "Lane Key : place marker", textX, HUD_Y + 382);
+            drawHudLine(g2, "← / → : Offset ±1ms", textX, HUD_Y + 405);
+            drawHudLine(g2, "Shift + ← / → : ±10ms", textX, HUD_Y + 428);
+            drawHudLine(g2, "Space : pause    R : restart", textX, HUD_Y + 451);
 
         } finally {
             g2.dispose();
         }
+    }
+
+    private void drawHudLine(Graphics2D g, String text, int x, int baselineY) {
+        g.setColor(new Color(0, 0, 0, 150));
+        g.drawString(text, x + 1, baselineY + 1);
+
+        g.setColor(Color.WHITE);
+        g.drawString(text, x, baselineY);
     }
 
     private void drawBackButton(Graphics2D g) {
@@ -686,6 +728,7 @@ public class CalibrationState implements GameState {
 
     private void drawPauseOverlay(Graphics2D g) {
         Graphics2D g2 = (Graphics2D) g.create();
+
         try {
             g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.50f));
             g2.setColor(Color.BLACK);

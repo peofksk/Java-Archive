@@ -129,6 +129,15 @@ public class NoteManager {
 				continue;
 			}
 
+			/*
+			 * stage musicOffsetSeconds는 곡 파일 자체의 첫 박자 위치다.
+			 * afterSchoolDessert처럼 파일 앞부분에 공백/대기 구간이 있는 곡은
+			 * 이 offset을 반드시 노트 시간에 더해야 실제 음악과 채보가 맞는다.
+			 *
+			 * globalOffset은 사용자 환경 보정값이고,
+			 * GamePlayState의 getGameplayTime() 쪽에서 더해지는 값이다.
+			 * 둘을 섞으면 안 됨.
+			 */
 			double hitTime = startBeat * secondsPerBeat + offset;
 			double endTime = Math.max(startBeat, endBeat) * secondsPerBeat + offset;
 
