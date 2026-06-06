@@ -61,20 +61,14 @@ public class CalibrationState implements GameState {
     private Image noteImage;
 
     private boolean preloaded = false;
-    private volatile boolean musicThreadStarted = false;
     private volatile boolean audioStarted = false;
-    private volatile boolean exiting = false;
-
-    private volatile long playbackGeneration = 0L;
 
     private boolean paused = false;
 
     private boolean backButtonHovered = false;
     private boolean backButtonPressed = false;
 
-    private volatile long songStartNano = 0L;
-    private long pauseStartNano = 0L;
-
+    private double leadInRemainingSeconds = LEAD_IN;
     private double timelineTime = -LEAD_IN;
 
     private final double bpm;
@@ -102,8 +96,6 @@ public class CalibrationState implements GameState {
     public void enter() {
         context.bgm.stop();
 
-        exiting = false;
-
         if (!preloaded) {
             preload();
         } else {
@@ -115,27 +107,21 @@ public class CalibrationState implements GameState {
 
         paused = false;
         audioStarted = false;
-        musicThreadStarted = false;
-        pauseStartNano = 0L;
+        leadInRemainingSeconds = LEAD_IN;
         timelineTime = -LEAD_IN;
 
         backButtonHovered = false;
         backButtonPressed = false;
-
-        long now = System.nanoTime();
-        songStartNano = now + (long) (LEAD_IN * 1_000_000_000L);
-
-        playbackGeneration++;
-        startScheduledMusicThread(playbackGeneration);
     }
 
     @Override
     public void exit() {
-        exiting = true;
-        playbackGeneration++;
-
         context.saveSettings();
         context.bgm.stop();
+
+        paused = false;
+        audioStarted = false;
+        clearLanePressedStates();
 
         backButtonHovered = false;
         backButtonPressed = false;
@@ -143,18 +129,17 @@ public class CalibrationState implements GameState {
 
     @Override
     public void update(double deltaTime) {
-        if (!paused) {
-            updateTimelineTime();
+        if (paused) {
+            return;
         }
 
+        advanceTimelineTime(deltaTime);
         updateHitMarkers(deltaTime);
     }
 
     @Override
     public void render(Graphics2D g) {
-        if (!paused) {
-            updateTimelineTime();
-        }
+        updateTimelineTime();
 
         drawBackground(g);
         drawOrbitScene(g);
@@ -276,68 +261,38 @@ public class CalibrationState implements GameState {
         preloaded = true;
     }
 
-    private void updateTimelineTime() {
-        timelineTime = getScheduledPlaybackTime();
-    }
-
-    private double getScheduledPlaybackTime() {
-        long now = System.nanoTime();
-        return (now - songStartNano) / 1_000_000_000.0;
-    }
-
-    private void startScheduledMusicThread(long generation) {
-        if (musicThreadStarted) {
+    private void advanceTimelineTime(double deltaTime) {
+        if (audioStarted) {
+            updateTimelineTime();
             return;
         }
 
-        musicThreadStarted = true;
+        leadInRemainingSeconds -= deltaTime;
 
-        Thread thread = new Thread(() -> {
-            try {
-                while (true) {
-                    if (exiting || generation != playbackGeneration) {
-                        return;
-                    }
+        if (leadInRemainingSeconds <= 0.0) {
+            context.bgm.playLoaded(false);
+            audioStarted = true;
+            timelineTime = context.bgm.getPositionSeconds();
+            return;
+        }
 
-                    if (paused) {
-                        Thread.sleep(1);
-                        continue;
-                    }
+        timelineTime = -leadInRemainingSeconds;
+    }
 
-                    long playRequestNano = songStartNano;
-                    long now = System.nanoTime();
-                    long remain = playRequestNano - now;
+    private void updateTimelineTime() {
+        if (paused) {
+            return;
+        }
 
-                    if (remain <= 0) {
-                        break;
-                    }
+        if (audioStarted) {
+            timelineTime = context.bgm.getPositionSeconds();
+            return;
+        }
 
-                    if (remain > 2_000_000L) {
-                        Thread.sleep(1);
-                    } else {
-                        Thread.yield();
-                    }
-                }
-
-                if (exiting || generation != playbackGeneration || paused) {
-                    return;
-                }
-
-                context.bgm.playLoaded(false);
-                audioStarted = true;
-
-            } catch (Exception ex) {
-                ex.printStackTrace();
-            }
-        });
-
-        thread.setDaemon(true);
-        thread.start();
+        timelineTime = -leadInRemainingSeconds;
     }
 
     private void restartPlayback() {
-        playbackGeneration++;
-
         context.bgm.stop();
         context.bgm.load(calibrationConfig.getMusicPath());
 
@@ -346,14 +301,8 @@ public class CalibrationState implements GameState {
 
         paused = false;
         audioStarted = false;
-        musicThreadStarted = false;
-        pauseStartNano = 0L;
+        leadInRemainingSeconds = LEAD_IN;
         timelineTime = -LEAD_IN;
-
-        long now = System.nanoTime();
-        songStartNano = now + (long) (LEAD_IN * 1_000_000_000L);
-
-        startScheduledMusicThread(playbackGeneration);
     }
 
     private void pausePlayback() {
@@ -364,9 +313,9 @@ public class CalibrationState implements GameState {
         updateTimelineTime();
 
         paused = true;
-        pauseStartNano = System.nanoTime();
+        clearLanePressedStates();
 
-        if (context.bgm.isPlaying()) {
+        if (audioStarted && context.bgm.isPlaying()) {
             context.bgm.pause();
         }
     }
@@ -376,22 +325,14 @@ public class CalibrationState implements GameState {
             return;
         }
 
-        long now = System.nanoTime();
-        long pausedDuration = now - pauseStartNano;
-
         paused = false;
-        pauseStartNano = 0L;
+        clearLanePressedStates();
 
-        if (context.bgm.isPaused()) {
+        if (audioStarted && context.bgm.isPaused()) {
             context.bgm.resume();
-
-            double musicPosition = context.bgm.getPositionSeconds();
-            songStartNano = now - (long) (musicPosition * 1_000_000_000L);
-            timelineTime = getScheduledPlaybackTime();
-
-        } else if (!audioStarted) {
-            songStartNano += pausedDuration;
         }
+
+        updateTimelineTime();
     }
 
     private void backToLevelSelect() {

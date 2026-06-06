@@ -23,6 +23,7 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
@@ -69,6 +70,7 @@ public class ChartEditor extends JFrame {
 
 	private JTextField bpmField;
 	private JTextField offsetField;
+	private JTextField globalOffsetField;
 	private JTextField startBeatField;
 	private JLabel musicLabel;
 
@@ -78,6 +80,8 @@ public class ChartEditor extends JFrame {
 	private Clip audioClip;
 	private double playbackStartBeat = 0.0;
 	private boolean updatingPresetSelectors = false;
+
+	private double globalOffsetSeconds = 0.0;
 
 	public ChartEditor() {
 		setTitle("Rhythm Chart Editor");
@@ -89,6 +93,7 @@ public class ChartEditor extends JFrame {
 		lanePanel.addMouseWheelListener(e -> SwingUtilities.invokeLater(this::syncScrollBarToLanePanel));
 
 		preloadStageAssets();
+		loadGlobalOffsetFromGameSettings();
 
 		add(createTopPanel(), BorderLayout.NORTH);
 		add(createEditorPanel(), BorderLayout.CENTER);
@@ -132,8 +137,14 @@ public class ChartEditor extends JFrame {
 		JLabel bpmLabel = new JLabel("BPM:");
 		bpmField = new JTextField("160", 5);
 
-		JLabel offsetLabel = new JLabel("Offset(s):");
+		JLabel offsetLabel = new JLabel("Stage Offset(s):");
 		offsetField = new JTextField("0.0", 6);
+
+		JLabel globalOffsetLabel = new JLabel("Global(s):");
+		globalOffsetField = new JTextField("0.000", 7);
+		globalOffsetField.setEditable(false);
+
+		JButton reloadGlobalOffsetButton = new JButton("Reload Global");
 
 		JLabel startBeatLabel = new JLabel("Start Beat:");
 		startBeatField = new JTextField("0.0", 6);
@@ -171,6 +182,9 @@ public class ChartEditor extends JFrame {
 		bottomRow.add(bpmField);
 		bottomRow.add(offsetLabel);
 		bottomRow.add(offsetField);
+		bottomRow.add(globalOffsetLabel);
+		bottomRow.add(globalOffsetField);
+		bottomRow.add(reloadGlobalOffsetButton);
 		bottomRow.add(startBeatLabel);
 		bottomRow.add(startBeatField);
 		bottomRow.add(useScrollButton);
@@ -244,6 +258,14 @@ public class ChartEditor extends JFrame {
 		});
 
 		reloadPresetButton.addActionListener(e -> loadSelectedPreset());
+
+		reloadGlobalOffsetButton.addActionListener(e -> {
+			loadGlobalOffsetFromGameSettings();
+			updateGlobalOffsetField();
+			updatePresetStatusLabel();
+			lanePanel.repaint();
+		});
+
 		playButton.addActionListener(e -> playAudio());
 		stopButton.addActionListener(e -> stopAudioAndResetLine());
 		exitButton.addActionListener(e -> {
@@ -476,6 +498,7 @@ public class ChartEditor extends JFrame {
 
 		bpmField.setText(formatDouble(preset.stage.getMusicBPM()));
 		offsetField.setText(formatDouble(preset.stage.getMusicOffsetSeconds()));
+		updateGlobalOffsetField();
 
 		ArrayList<String> chartLines = preloadedCharts.get(buildChartCacheKey(preset.stage, difficulty, keyMode));
 		if (chartLines != null) {
@@ -732,7 +755,7 @@ public class ChartEditor extends JFrame {
 		String musicStatus = audioClip != null ? String.format("%.3f s", getClipLengthSeconds()) : "missing";
 
 		musicLabel.setText(String.format(
-				"Preset: %s / %s / %dK | Chart: %s | Path: %s | BPM: %s | Offset: %s s | Notes: %d | Lanes: %d | Music: %s | Ctrl+S: overwrite",
+				"Preset: %s / %s / %dK | Chart: %s | Path: %s | BPM: %s | Stage Offset: %s s | Global: %s s | Notes: %d | Lanes: %d | Music: %s | Ctrl+S: overwrite",
 				preset.stage.getLevelName(),
 				difficulty.name(),
 				keyMode.getKeyCount(),
@@ -740,9 +763,46 @@ public class ChartEditor extends JFrame {
 				buildChartResourcePath(preset.stage, difficulty, keyMode),
 				formatDouble(parseBpm()),
 				formatDouble(parseOffsetSeconds()),
+				formatDouble(globalOffsetSeconds),
 				lanePanel.getNoteCount(),
 				lanePanel.getLaneCount(),
 				musicStatus));
+	}
+
+	private void loadGlobalOffsetFromGameSettings() {
+		Path settingsPath = Paths.get(
+				System.getProperty("user.home"),
+				".Java-Archive",
+				"settings.properties"
+		);
+
+		if (!Files.exists(settingsPath)) {
+			globalOffsetSeconds = 0.0;
+			updateGlobalOffsetField();
+			return;
+		}
+
+		Properties props = new Properties();
+
+		try (InputStream in = Files.newInputStream(settingsPath)) {
+			props.load(in);
+
+			String value = props.getProperty("globalOffset", "0.0");
+			globalOffsetSeconds = Double.parseDouble(value.trim());
+
+		} catch (Exception e) {
+			globalOffsetSeconds = 0.0;
+			System.err.println("[ChartEditor] Failed to load globalOffset from settings: " + settingsPath);
+			e.printStackTrace();
+		}
+
+		updateGlobalOffsetField();
+	}
+
+	private void updateGlobalOffsetField() {
+		if (globalOffsetField != null) {
+			globalOffsetField.setText(formatDouble(globalOffsetSeconds));
+		}
 	}
 
 	private String buildChartResourcePath(Stage stage, Difficulty difficulty, KeyMode keyMode) {
@@ -797,8 +857,10 @@ public class ChartEditor extends JFrame {
 			}
 
 			ArrayList<String> lines = new ArrayList<>();
+
 			try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
 				String line;
+
 				while ((line = br.readLine()) != null) {
 					lines.add(line);
 				}
@@ -824,18 +886,19 @@ public class ChartEditor extends JFrame {
 		return (KeyMode) keyModeCombo.getSelectedItem();
 	}
 
-	private double beatToSeconds(double beat, double bpm, double offsetSeconds) {
-		return beat * (60.0 / bpm) + offsetSeconds;
+	private double beatToSeconds(double beat, double bpm, double stageOffsetSeconds) {
+		return beat * (60.0 / bpm) + stageOffsetSeconds - globalOffsetSeconds;
 	}
 
-	private double secondsToBeat(double seconds, double bpm, double offsetSeconds) {
-		return (seconds - offsetSeconds) / (60.0 / bpm);
+	private double secondsToBeat(double seconds, double bpm, double stageOffsetSeconds) {
+		return (seconds + globalOffsetSeconds - stageOffsetSeconds) / (60.0 / bpm);
 	}
 
 	private double getClipLengthSeconds() {
 		if (audioClip == null) {
 			return 0.0;
 		}
+
 		return audioClip.getMicrosecondLength() / 1_000_000.0;
 	}
 

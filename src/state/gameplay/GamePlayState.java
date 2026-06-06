@@ -1,18 +1,14 @@
 package state.gameplay;
 
 import java.awt.AlphaComposite;
-import java.awt.BasicStroke;
+import java.awt.Canvas;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Font;
-import java.awt.FontMetrics;
 import java.awt.GradientPaint;
 import java.awt.Graphics2D;
 import java.awt.Image;
-import java.awt.Point;
-import java.awt.Rectangle;
-import java.awt.RenderingHints;
 import java.awt.event.KeyEvent;
-import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -21,42 +17,31 @@ import java.util.List;
 import java.util.Map;
 
 import asset.AssetManager;
+import asset.Init;
 import core.GameContext;
 import core.GameState;
 import stage.Difficulty;
 import stage.Stage;
-import state.LevelSelectState;
 import state.ResultState;
 import util.RenderUtils;
 
 public class GamePlayState implements GameState {
-
 	private static final int SCREEN_WIDTH = 1024;
 	private static final int SCREEN_HEIGHT = 576;
-
 	private static final int PLAYFIELD_START_X = 30;
 	private static final int PLAYFIELD_WIDTH = 320;
 	private static final int JUDGEMENT_LINE_Y = 383;
 
-	private static final int TOP_BUTTON_W = 96;
-	private static final int TOP_BUTTON_H = 36;
-	private static final int TOP_BUTTON_Y = 34;
-
-	private static final int RESUME_BUTTON_X = 36;
-	private static final int PAUSE_BUTTON_X = SCREEN_WIDTH - TOP_BUTTON_W - 36;
-	private static final int BACK_BUTTON_X = SCREEN_WIDTH - TOP_BUTTON_W - 36;
-
 	private static final double LEAD_IN = 3.0;
-	private static final double AUDIO_OUTPUT_LATENCY = 0.0;
-	private static final double NOTE_SCROLL_SPEED = 500.0;
+	private static final double NOTE_SCROLL_SPEED = 600.0;
 
 	private final GameContext context;
 	private final AssetManager am = AssetManager.getInstance();
-
 	private final Stage stage;
 	private final Difficulty difficulty;
 
 	private NoteManager nm;
+	private AutoRobot autoRobot;
 
 	private Image background;
 	private Image judgementLine;
@@ -68,33 +53,20 @@ public class GamePlayState implements GameState {
 	private volatile boolean paused = false;
 	private boolean resultRequested = false;
 
-	private volatile boolean exiting = false;
-	private volatile long playbackGeneration = 0L;
-
-	private volatile boolean musicThreadStarted = false;
 	private volatile boolean audioStarted = false;
-	private volatile long songStartNano = 0L;
-
-	private long pauseStartNano = 0L;
+	private double leadInRemainingSeconds = LEAD_IN;
 	private double timelineTime = -LEAD_IN;
-
-	private boolean pauseButtonHovered = false;
-	private boolean pauseButtonPressed = false;
-
-	private boolean resumeButtonHovered = false;
-	private boolean resumeButtonPressed = false;
-
-	private boolean backButtonHovered = false;
-	private boolean backButtonPressed = false;
 
 	private int score = 0;
 	private int combo = 0;
 	private int maxCombo = 0;
-
 	private String lastJudge = "";
 	private float alpha = 0.0f;
 	private double accuracy = 100.0;
 	private int totalNoteCount = 1;
+
+	private boolean autoInputInProgress = false;
+	private final Component autoEventSource = new Canvas();
 
 	private final Map<Lane, Boolean> lanePressed = new HashMap<>();
 	private final EnumMap<Judgement, Integer> judgementCounts = new EnumMap<>(Judgement.class);
@@ -115,11 +87,11 @@ public class GamePlayState implements GameState {
 
 		background = am.getImage(stage.getBackgroundImageKey());
 		judgementLine = am.getImage("judgement_line");
+
 		loadNoteSkin();
-
 		loadNoteManager();
-		context.bgm.load(stage.getMusicPath());
 
+		context.bgm.load(stage.getMusicPath());
 		preloaded = true;
 	}
 
@@ -135,27 +107,12 @@ public class GamePlayState implements GameState {
 			context.bgm.load(stage.getMusicPath());
 		}
 
-		long now = System.nanoTime();
-
-		songStartNano = now + (long) (LEAD_IN * 1_000_000_000L);
+		leadInRemainingSeconds = LEAD_IN;
 		timelineTime = -LEAD_IN;
-
-		exiting = false;
-		playbackGeneration++;
-
-		musicThreadStarted = false;
 		audioStarted = false;
 		started = true;
 		paused = false;
 		resultRequested = false;
-		pauseStartNano = 0L;
-
-		pauseButtonHovered = false;
-		pauseButtonPressed = false;
-		resumeButtonHovered = false;
-		resumeButtonPressed = false;
-		backButtonHovered = false;
-		backButtonPressed = false;
 
 		score = 0;
 		combo = 0;
@@ -166,8 +123,6 @@ public class GamePlayState implements GameState {
 
 		resetJudgementCounts();
 		clearLanePressedStates();
-
-		startScheduledMusicThread(playbackGeneration);
 	}
 
 	private void loadNoteSkin() {
@@ -179,43 +134,41 @@ public class GamePlayState implements GameState {
 		nm = new NoteManager(context, stage.getMusicBPM(), stage.getMusicOffsetSeconds());
 		nm.loadChart(buildChartKey());
 		totalNoteCount = Math.max(1, nm.getRemainingNoteCount());
+
+		if (context.isAutoMode()) {
+			autoRobot = new AutoRobot(this, context, nm);
+		} else {
+			autoRobot = null;
+		}
 	}
 
 	private String buildChartKey() {
-		return "note_"
-				+ stage.getLevelName()
-				+ "_"
-				+ difficulty.name().toLowerCase()
-				+ "_"
-				+ context.getKeyCount()
-				+ "K";
+		return Init.buildChartKey(stage.getLevelName(), difficulty, context.getKeyMode());
 	}
 
 	@Override
 	public void exit() {
-		exiting = true;
-		playbackGeneration++;
-
 		clearLanePressedStates();
 		context.bgm.stop();
-
-		pauseButtonHovered = false;
-		pauseButtonPressed = false;
-		resumeButtonHovered = false;
-		resumeButtonPressed = false;
-		backButtonHovered = false;
-		backButtonPressed = false;
 	}
 
 	@Override
 	public void update(double deltaTime) {
-		if (!started || paused || resultRequested) {
+		if (!started || resultRequested) {
 			return;
 		}
 
-		updateTimelineTime();
+		if (paused) {
+			return;
+		}
+
+		advanceTimelineTime(deltaTime);
 
 		double gameTime = getGameplayTime();
+
+		if (autoRobot != null) {
+			autoRobot.update(gameTime);
+		}
 
 		int missCountThisFrame = nm.update(gameTime, lanePressed);
 
@@ -238,12 +191,7 @@ public class GamePlayState implements GameState {
 	public void render(Graphics2D g) {
 		LaneLayout layout = getLaneLayout();
 
-		if (background != null) {
-			g.drawImage(background, 0, 0, null);
-		} else {
-			g.setColor(Color.BLACK);
-			g.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-		}
+		g.drawImage(background, 0, 0, null);
 
 		drawLane(g, layout);
 		drawJudgementLine(g, layout);
@@ -251,10 +199,24 @@ public class GamePlayState implements GameState {
 		drawLaneKeyBindings(g, layout);
 		renderNotes(g, layout, getGameplayTime());
 		drawGameHUD(g);
-		drawPauseButton(g);
+		drawAutoStatus(g);
 
 		if (paused) {
-			drawPauseOverlay(g);
+			java.awt.Composite original = g.getComposite();
+
+			g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.5f));
+			g.setColor(Color.BLACK);
+			g.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+			g.setColor(Color.WHITE);
+			g.setFont(new Font("Arial", Font.BOLD, 40));
+			RenderUtils.drawCenteredString(g, "PAUSED", 0, 220, SCREEN_WIDTH, 50);
+
+			g.setFont(new Font("Arial", Font.PLAIN, 22));
+			RenderUtils.drawCenteredString(g, "Press ESC to Resume", 0, 285, SCREEN_WIDTH, 28);
+			RenderUtils.drawCenteredString(g, "Press Enter to Exit", 0, 320, SCREEN_WIDTH, 28);
+
+			g.setComposite(original);
 		}
 	}
 
@@ -284,6 +246,10 @@ public class GamePlayState implements GameState {
 
 		Lane inputLane = context.getLaneForKeyCode(e.getKeyCode());
 
+		if (context.isAutoMode() && inputLane != null && !autoInputInProgress) {
+			return;
+		}
+
 		if (inputLane != null) {
 			if (isLanePressed(inputLane)) {
 				return;
@@ -310,9 +276,17 @@ public class GamePlayState implements GameState {
 
 	@Override
 	public void keyReleased(KeyEvent e) {
+		if (!started || paused || resultRequested) {
+			return;
+		}
+
 		Lane inputLane = context.getLaneForKeyCode(e.getKeyCode());
 
 		if (inputLane == null) {
+			return;
+		}
+
+		if (context.isAutoMode() && !autoInputInProgress) {
 			return;
 		}
 
@@ -325,68 +299,41 @@ public class GamePlayState implements GameState {
 		applyJudgement(result);
 	}
 
-	@Override
-	public void mouseMoved(MouseEvent e) {
-		updateButtonHoverState(e.getPoint());
+	void dispatchAutoKeyPressed(int keyCode) {
+		dispatchAutoKeyEvent(KeyEvent.KEY_PRESSED, keyCode);
 	}
 
-	@Override
-	public void mouseDragged(MouseEvent e) {
-		mouseMoved(e);
+	void dispatchAutoKeyReleased(int keyCode) {
+		dispatchAutoKeyEvent(KeyEvent.KEY_RELEASED, keyCode);
 	}
 
-	@Override
-	public void mousePressed(MouseEvent e) {
-		if (e.getButton() != MouseEvent.BUTTON1) {
-			return;
+	private void dispatchAutoKeyEvent(int eventId, int keyCode) {
+		Component source = context.getGamePanel();
+
+		if (source == null) {
+			source = autoEventSource;
 		}
 
-		Point point = e.getPoint();
+		KeyEvent event = new KeyEvent(
+				source,
+				eventId,
+				System.currentTimeMillis(),
+				0,
+				keyCode,
+				KeyEvent.CHAR_UNDEFINED
+		);
 
-		if (paused) {
-			resumeButtonPressed = getResumeButtonBounds().contains(point);
-			backButtonPressed = getBackButtonBounds().contains(point);
-			return;
-		}
+		autoInputInProgress = true;
 
-		if (started && !resultRequested) {
-			pauseButtonPressed = getPauseButtonBounds().contains(point);
-		}
-	}
-
-	@Override
-	public void mouseReleased(MouseEvent e) {
-		if (e.getButton() != MouseEvent.BUTTON1) {
-			clearButtonPressedStates();
-			return;
-		}
-
-		Point point = e.getPoint();
-
-		if (paused) {
-			if (resumeButtonPressed && getResumeButtonBounds().contains(point)) {
-				clearButtonPressedStates();
-				resumeGame();
-				return;
+		try {
+			if (eventId == KeyEvent.KEY_PRESSED) {
+				keyPressed(event);
+			} else if (eventId == KeyEvent.KEY_RELEASED) {
+				keyReleased(event);
 			}
-
-			if (backButtonPressed && getBackButtonBounds().contains(point)) {
-				clearButtonPressedStates();
-				backToLevelSelect();
-				return;
-			}
-
-			clearButtonPressedStates();
-			return;
+		} finally {
+			autoInputInProgress = false;
 		}
-
-		if (pauseButtonPressed && getPauseButtonBounds().contains(point)) {
-			clearButtonPressedStates();
-			pauseGame();
-			return;
-		}
-
-		clearButtonPressedStates();
 	}
 
 	private LaneLayout getLaneLayout() {
@@ -417,19 +364,20 @@ public class GamePlayState implements GameState {
 			return;
 		}
 
-		int y = (int) Math.round(JUDGEMENT_LINE_Y - (note.getHitTime() - gameTime) * NOTE_SCROLL_SPEED);
+		int noteHeight = getNoteDrawHeight();
+		int y = getNoteTopY(note.getHitTime(), gameTime, noteHeight);
 		drawNoteHead(g, laneX, laneWidth, y);
 	}
 
 	private void drawLongNote(Graphics2D g, int laneX, int laneWidth, Note note, boolean active, double gameTime) {
 		double headTime = active ? Math.max(note.getHitTime(), gameTime) : note.getHitTime();
 
-		int headY = (int) Math.round(JUDGEMENT_LINE_Y - (headTime - gameTime) * NOTE_SCROLL_SPEED);
-		int tailY = (int) Math.round(JUDGEMENT_LINE_Y - (note.getEndTime() - gameTime) * NOTE_SCROLL_SPEED);
-
 		int drawWidth = getNoteDrawWidth(laneWidth);
 		int drawHeight = getNoteDrawHeight();
 		int drawX = laneX + (laneWidth - drawWidth) / 2;
+
+		int headY = getNoteTopY(headTime, gameTime, drawHeight);
+		int tailY = getNoteTopY(note.getEndTime(), gameTime, drawHeight);
 
 		int topY = Math.min(headY, tailY);
 		int bottomY = Math.max(headY, tailY);
@@ -463,6 +411,14 @@ public class GamePlayState implements GameState {
 
 		drawNoteHead(g, laneX, laneWidth, tailY);
 		drawNoteHead(g, laneX, laneWidth, headY);
+	}
+
+	private int getNoteTopY(double targetTime, double gameTime, int noteHeight) {
+		return (int) Math.round(
+				JUDGEMENT_LINE_Y
+						- noteHeight / 2.0
+						- (targetTime - gameTime) * NOTE_SCROLL_SPEED
+		);
 	}
 
 	private void drawNoteHead(Graphics2D g, int laneX, int laneWidth, int y) {
@@ -502,84 +458,50 @@ public class GamePlayState implements GameState {
 		}
 	}
 
-	private void updateTimelineTime() {
-		timelineTime = getScheduledPlaybackTime();
+	private void advanceTimelineTime(double deltaTime) {
+		if (audioStarted) {
+			updateTimelineTime();
+			return;
+		}
+
+		leadInRemainingSeconds -= deltaTime;
+
+		if (leadInRemainingSeconds <= 0.0) {
+			context.bgm.playLoaded(false);
+			audioStarted = true;
+			timelineTime = context.bgm.getPositionSeconds();
+			return;
+		}
+
+		timelineTime = -leadInRemainingSeconds;
 	}
 
-	private double getScheduledPlaybackTime() {
-		long now = System.nanoTime();
-		return ((now - songStartNano) / 1_000_000_000.0);
+	private void updateTimelineTime() {
+		if (audioStarted) {
+			timelineTime = context.bgm.getPositionSeconds();
+			return;
+		}
+
+		timelineTime = -leadInRemainingSeconds;
 	}
 
 	private double getGameplayTime() {
 		return timelineTime + context.getGlobalOffset();
 	}
 
-	private void startScheduledMusicThread(long generation) {
-		if (musicThreadStarted) {
-			return;
-		}
-
-		musicThreadStarted = true;
-
-		Thread t = new Thread(() -> {
-			try {
-				while (true) {
-					if (exiting || generation != playbackGeneration || resultRequested) {
-						return;
-					}
-
-					if (paused) {
-						Thread.sleep(1);
-						continue;
-					}
-
-					long playRequestNano = songStartNano;
-					long now = System.nanoTime();
-					long remain = playRequestNano - now;
-
-					if (remain <= 0) {
-						break;
-					}
-
-					if (remain > 2_000_000L) {
-						Thread.sleep(1);
-					} else {
-						Thread.yield();
-					}
-				}
-
-				if (exiting || generation != playbackGeneration || resultRequested || paused) {
-					return;
-				}
-
-				context.bgm.playLoaded(false);
-				audioStarted = true;
-
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		});
-
-		t.setDaemon(true);
-		t.start();
-	}
-
 	private void pauseGame() {
-		if (paused) {
+		if (paused || resultRequested) {
 			return;
 		}
 
 		updateTimelineTime();
 
 		paused = true;
-		pauseStartNano = System.nanoTime();
+		clearLanePressedStates();
 
-		if (context.bgm.isPlaying()) {
+		if (audioStarted && context.bgm.isPlaying()) {
 			context.bgm.pause();
 		}
-
-		clearLanePressedStates();
 	}
 
 	private void resumeGame() {
@@ -587,29 +509,14 @@ public class GamePlayState implements GameState {
 			return;
 		}
 
-		long now = System.nanoTime();
-		long pausedDuration = now - pauseStartNano;
-
 		paused = false;
-		pauseStartNano = 0L;
+		clearLanePressedStates();
 
-		if (context.bgm.isPaused()) {
+		if (audioStarted && context.bgm.isPaused()) {
 			context.bgm.resume();
-
-			double musicPosition = context.bgm.getPositionSeconds();
-			songStartNano = now - (long) (musicPosition * 1_000_000_000L);
-			timelineTime = getScheduledPlaybackTime();
-
-		} else if (!audioStarted) {
-			songStartNano += pausedDuration;
 		}
 
-		clearLanePressedStates();
-	}
-
-	private void backToLevelSelect() {
-		clearLanePressedStates();
-		context.changeState(new LevelSelectState(context));
+		updateTimelineTime();
 	}
 
 	private void applyJudgement(Judgement result) {
@@ -715,126 +622,20 @@ public class GamePlayState implements GameState {
 		g2.dispose();
 	}
 
-	private void drawPauseButton(Graphics2D g) {
-		if (paused || resultRequested || !started) {
+	private void drawAutoStatus(Graphics2D g) {
+		if (!context.isAutoMode()) {
 			return;
 		}
 
-		drawTopButton(g, getPauseButtonBounds(), "PAUSE", pauseButtonHovered, pauseButtonPressed);
-	}
+		String text = "AUTO ON";
 
-	private void drawPauseOverlay(Graphics2D g) {
-		java.awt.Composite original = g.getComposite();
+		g.setFont(new Font("SansSerif", Font.BOLD, 18));
+		g.setColor(new Color(255, 120, 255));
 
-		g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.5f));
-		g.setColor(Color.BLACK);
-		g.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-		g.setComposite(original);
+		int x = 20;
+		int y = 32;
 
-		g.setColor(Color.WHITE);
-		g.setFont(new Font("Arial", Font.BOLD, 40));
-		RenderUtils.drawCenteredString(g, "PAUSED", 0, 220, SCREEN_WIDTH, 50);
-
-		g.setFont(new Font("Arial", Font.PLAIN, 22));
-		RenderUtils.drawCenteredString(g, "Press ESC to Resume", 0, 285, SCREEN_WIDTH, 28);
-		RenderUtils.drawCenteredString(g, "Press Enter to Result", 0, 320, SCREEN_WIDTH, 28);
-
-		drawResumeButton(g);
-		drawBackButton(g);
-	}
-
-	private void drawResumeButton(Graphics2D g) {
-		drawTopButton(g, getResumeButtonBounds(), "RESUME", resumeButtonHovered, resumeButtonPressed);
-	}
-
-	private void drawBackButton(Graphics2D g) {
-		drawTopButton(g, getBackButtonBounds(), "BACK", backButtonHovered, backButtonPressed);
-	}
-
-	private void drawTopButton(Graphics2D g, Rectangle bounds, String text, boolean hovered, boolean pressed) {
-		Graphics2D g2 = (Graphics2D) g.create();
-
-		try {
-			g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-			Color fill;
-			Color border;
-			Color textColor;
-
-			if (pressed) {
-				fill = new Color(35, 105, 165, 230);
-				border = new Color(210, 245, 255, 255);
-				textColor = Color.WHITE;
-			} else if (hovered) {
-				fill = new Color(70, 145, 205, 210);
-				border = new Color(190, 235, 255, 245);
-				textColor = Color.WHITE;
-			} else {
-				fill = new Color(0, 0, 0, 135);
-				border = new Color(130, 190, 230, 210);
-				textColor = new Color(235, 248, 255);
-			}
-
-			g2.setColor(new Color(0, 0, 0, 120));
-			g2.fillRoundRect(bounds.x + 3, bounds.y + 4, bounds.width, bounds.height, 14, 14);
-
-			g2.setColor(fill);
-			g2.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 14, 14);
-
-			g2.setStroke(new BasicStroke(2f));
-			g2.setColor(border);
-			g2.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 14, 14);
-
-			g2.setFont(new Font("Arial", Font.BOLD, text.length() >= 6 ? 14 : 16));
-			drawCenteredString(g2, text, bounds, textColor);
-
-		} finally {
-			g2.dispose();
-		}
-	}
-
-	private void drawCenteredString(Graphics2D g, String text, Rectangle bounds, Color color) {
-		FontMetrics fm = g.getFontMetrics();
-
-		int textX = bounds.x + (bounds.width - fm.stringWidth(text)) / 2;
-		int textY = bounds.y + ((bounds.height - fm.getHeight()) / 2) + fm.getAscent();
-
-		g.setColor(new Color(0, 0, 0, 130));
-		g.drawString(text, textX + 1, textY + 1);
-
-		g.setColor(color);
-		g.drawString(text, textX, textY);
-	}
-
-	private Rectangle getPauseButtonBounds() {
-		return new Rectangle(PAUSE_BUTTON_X, TOP_BUTTON_Y, TOP_BUTTON_W, TOP_BUTTON_H);
-	}
-
-	private Rectangle getResumeButtonBounds() {
-		return new Rectangle(RESUME_BUTTON_X, TOP_BUTTON_Y, TOP_BUTTON_W, TOP_BUTTON_H);
-	}
-
-	private Rectangle getBackButtonBounds() {
-		return new Rectangle(BACK_BUTTON_X, TOP_BUTTON_Y, TOP_BUTTON_W, TOP_BUTTON_H);
-	}
-
-	private void updateButtonHoverState(Point point) {
-		if (paused) {
-			resumeButtonHovered = getResumeButtonBounds().contains(point);
-			backButtonHovered = getBackButtonBounds().contains(point);
-			pauseButtonHovered = false;
-			return;
-		}
-
-		pauseButtonHovered = started && !resultRequested && getPauseButtonBounds().contains(point);
-		resumeButtonHovered = false;
-		backButtonHovered = false;
-	}
-
-	private void clearButtonPressedStates() {
-		pauseButtonPressed = false;
-		resumeButtonPressed = false;
-		backButtonPressed = false;
+		g.drawString(text, x, y);
 	}
 
 	private void drawScorePanelBackground(Graphics2D g) {
@@ -906,7 +707,6 @@ public class GamePlayState implements GameState {
 
 		try {
 			g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.95f));
-
 			g2.setColor(outerGlow);
 			g2.fillRect(dividerX - 7, 0, 14, layout.getLaneHeight());
 
@@ -1005,8 +805,8 @@ public class GamePlayState implements GameState {
 		for (int y = 0; y < height; y++) {
 			for (int x = 0; x < width; x++) {
 				int argb = bufferedImage.getRGB(x, y);
-
 				int alpha = (argb >>> 24) & 0xFF;
+
 				if (alpha < 80) {
 					continue;
 				}

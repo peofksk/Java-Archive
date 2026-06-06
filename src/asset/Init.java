@@ -4,7 +4,6 @@ import stage.Difficulty;
 import state.gameplay.KeyMode;
 
 public class Init {
-
     private static final String[] STAGE_NAMES = {
             "unwelcomeSchool",
             "afterSchoolDessert",
@@ -35,7 +34,6 @@ public class Init {
         am.loadImage("stage_unwelcomeSchool_bg", "/image/background/unwelcomeSchoolBackground.png");
         am.loadImage("stage_afterSchoolDessert_bg", "/image/background/afterSchoolDessertBackground.png");
         am.loadImage("stage_operationDotabata_bg", "/image/background/operationDotabataBackground.png");
-
         am.loadImage("stage_test_bg", "/image/background/testGameBackground.png");
     }
 
@@ -54,10 +52,8 @@ public class Init {
         am.loadImage("arrow_left", "/image/ui/arrowLeft.png");
         am.loadImage("arrow_right", "/image/ui/arrowRight.png");
         am.loadImage("corner", "/image/ui/corner.png");
-
         am.loadImage("exit", "/image/ui/exitButton.png");
         am.loadImage("exit_pressed", "/image/ui/exitButtonPressed.png");
-
         am.loadImage("lane", "/image/ui/lane.png");
         am.loadImage("judgement_line", "/image/ui/judgement_line.png");
     }
@@ -105,13 +101,15 @@ public class Init {
             Difficulty difficulty,
             KeyMode keyMode
     ) {
-        return "note_"
-                + stageName
-                + "_"
-                + difficulty.name().toLowerCase()
-                + "_"
-                + keyMode.getKeyCount()
-                + "K";
+        return buildChartKey(stageName, difficulty, keyMode.getKeyCount());
+    }
+
+    public static String buildChartKey(
+            String stageName,
+            Difficulty difficulty,
+            int keyCount
+    ) {
+        return "note_" + stageName + "_" + difficulty.name().toLowerCase() + "_" + keyCount + "K";
     }
 
     public static String buildChartPath(
@@ -119,12 +117,14 @@ public class Init {
             Difficulty difficulty,
             KeyMode keyMode
     ) {
-        return "/chart/"
-                + stageName
-                + "/"
-                + difficulty.name()
-                + "_"
-                + keyMode.getKeyCount()
-                + "K.txt";
+        return buildChartPath(stageName, difficulty, keyMode.getKeyCount());
+    }
+
+    public static String buildChartPath(
+            String stageName,
+            Difficulty difficulty,
+            int keyCount
+    ) {
+        return "/chart/" + stageName + "/" + difficulty.name() + "_" + keyCount + "K.txt";
     }
 }

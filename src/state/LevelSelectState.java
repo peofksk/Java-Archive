@@ -19,7 +19,6 @@ import stage.Difficulty;
 import state.gameplay.GamePlayState;
 
 public class LevelSelectState implements GameState {
-
 	private static final int BUTTON_START = 0;
 	private static final int BUTTON_OPTION = 1;
 	private static final int BUTTON_CALIBRATION = 2;
@@ -130,6 +129,7 @@ public class LevelSelectState implements GameState {
 		}
 
 		drawBackButton(g);
+		drawAutoStatus(g);
 	}
 
 	private void drawMenuButtons(Graphics2D g) {
@@ -187,7 +187,6 @@ public class LevelSelectState implements GameState {
 		String difficultyText = context.getCurrentDifficulty().name();
 
 		int baselineY = 530;
-
 		int labelX = 235;
 		int difficultyCenterX = 700;
 		int arrowOffset = 105;
@@ -272,15 +271,29 @@ public class LevelSelectState implements GameState {
 
 			g2.setFont(new Font("Arial", Font.BOLD, 16));
 			drawCenteredString(g2, "BACK", bounds, text);
-
 		} finally {
 			g2.dispose();
 		}
 	}
 
+	private void drawAutoStatus(Graphics2D g) {
+		if (!context.isAutoMode()) {
+			return;
+		}
+
+		String text = "AUTO ON";
+
+		g.setFont(new Font("SansSerif", Font.BOLD, 18));
+		g.setColor(new Color(255, 120, 255));
+
+		int x = 20;
+		int y = 32;
+
+		g.drawString(text, x, y);
+	}
+
 	private void drawCenteredString(Graphics2D g, String text, Rectangle bounds, Color color) {
 		FontMetrics fm = g.getFontMetrics();
-
 		int textX = bounds.x + (bounds.width - fm.stringWidth(text)) / 2;
 		int textY = bounds.y + ((bounds.height - fm.getHeight()) / 2) + fm.getAscent();
 
@@ -603,7 +616,6 @@ public class LevelSelectState implements GameState {
 	public void exit() {
 		hoveredMenuButton = -1;
 		pressedMenuButton = -1;
-
 		backButtonHovered = false;
 		backButtonPressed = false;
 	}

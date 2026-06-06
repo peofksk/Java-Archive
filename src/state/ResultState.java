@@ -19,7 +19,6 @@ import state.gameplay.GameResult;
 import state.gameplay.Judgement;
 
 public class ResultState implements GameState {
-
     private static final int BACK_BUTTON_W = 96;
     private static final int BACK_BUTTON_H = 36;
     private static final int BACK_BUTTON_X = 1024 - BACK_BUTTON_W - 36;
@@ -30,7 +29,6 @@ public class ResultState implements GameState {
 
     private Image background;
     private boolean preloaded = false;
-
     private final GameResult result;
 
     private boolean backButtonHovered = false;
@@ -48,7 +46,6 @@ public class ResultState implements GameState {
 
         background = am.getImage("result_bg");
         context.bgm.load("/audio/bgm/resultMusic.wav");
-
         preloaded = true;
     }
 
@@ -81,6 +78,7 @@ public class ResultState implements GameState {
 
         drawBackButton(g);
         drawResultText(g);
+        drawAutoStatus(g);
     }
 
     private void drawResultText(Graphics2D g) {
@@ -166,15 +164,29 @@ public class ResultState implements GameState {
 
             g2.setFont(new Font("Arial", Font.BOLD, 16));
             drawCenteredString(g2, "BACK", bounds, text);
-
         } finally {
             g2.dispose();
         }
     }
 
+    private void drawAutoStatus(Graphics2D g) {
+        if (!context.isAutoMode()) {
+            return;
+        }
+
+        String text = "AUTO ON";
+
+        g.setFont(new Font("SansSerif", Font.BOLD, 18));
+        g.setColor(new Color(255, 120, 255));
+
+        int x = 20;
+        int y = 32;
+
+        g.drawString(text, x, y);
+    }
+
     private void drawCenteredString(Graphics2D g, String text, Rectangle bounds, Color color) {
         FontMetrics fm = g.getFontMetrics();
-
         int textX = bounds.x + (bounds.width - fm.stringWidth(text)) / 2;
         int textY = bounds.y + ((bounds.height - fm.getHeight()) / 2) + fm.getAscent();
 

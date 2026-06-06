@@ -23,33 +23,27 @@ import state.gameplay.KeyMode;
 import state.gameplay.Lane;
 
 public class OptionState implements GameState {
-
 	private static final int BUTTON_KEY_MODE_4 = 0;
 	private static final int BUTTON_KEY_MODE_6 = 1;
-	private static final int BUTTON_SAVE = 2;
+	private static final int BUTTON_AUTO = 2;
+	private static final int BUTTON_SAVE = 3;
 
 	private static final int LEFT_X = 475;
 	private static final int RIGHT_X = 665;
-
 	private static final int MODE_TEXT_Y = 128;
 	private static final int GUIDE_TOP_Y = 148;
-
 	private static final int MODE_Y = 176;
 	private static final int MODE_BUTTON_W = 175;
 	private static final int MODE_BUTTON_H = 42;
-
 	private static final int LANE_START_Y = 246;
 	private static final int LANE_BUTTON_W = 175;
 	private static final int LANE_BUTTON_H = 38;
 	private static final int LANE_GAP_Y = 12;
-
 	private static final int WARNING_Y = 405;
 	private static final int GUIDE_BOTTOM_Y = 430;
-
 	private static final int BOTTOM_Y = 438;
 	private static final int BOTTOM_BUTTON_W = 175;
 	private static final int BOTTOM_BUTTON_H = 42;
-
 	private static final int BACK_BUTTON_W = 96;
 	private static final int BACK_BUTTON_H = 36;
 	private static final int BACK_BUTTON_X = 808;
@@ -59,10 +53,8 @@ public class OptionState implements GameState {
 	private final AssetManager am = AssetManager.getInstance();
 
 	private Image background;
-
 	private boolean preloaded = false;
 	private boolean savedNoticeVisible = false;
-
 	private Lane waitingKeyLane = null;
 	private String warningMessage = null;
 
@@ -71,10 +63,8 @@ public class OptionState implements GameState {
 
 	private int hoveredFixedButton = -1;
 	private int pressedFixedButton = -1;
-
 	private Lane hoveredLaneButton = null;
 	private Lane pressedLaneButton = null;
-
 	private boolean backButtonHovered = false;
 	private boolean backButtonPressed = false;
 
@@ -89,7 +79,6 @@ public class OptionState implements GameState {
 
 		context.bgm.load("/audio/bgm/optionMusic.wav");
 		background = am.getImage("option_bg");
-
 		preloaded = true;
 	}
 
@@ -106,12 +95,10 @@ public class OptionState implements GameState {
 		waitingKeyLane = null;
 		warningMessage = null;
 		savedNoticeVisible = false;
-
 		hoveredFixedButton = -1;
 		pressedFixedButton = -1;
 		hoveredLaneButton = null;
 		pressedLaneButton = null;
-
 		backButtonHovered = false;
 		backButtonPressed = false;
 
@@ -157,6 +144,7 @@ public class OptionState implements GameState {
 		drawButtons(g);
 		drawSavedNotice(g);
 		drawBackButton(g);
+		drawAutoStatus(g);
 
 		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, oldAntialiasing);
 	}
@@ -168,7 +156,7 @@ public class OptionState implements GameState {
 
 		g.setColor(new Color(255, 255, 255, 190));
 		g.setFont(new Font("Dialog", Font.PLAIN, 15));
-		g.drawString("Press 4 / 6 or click buttons to change key mode.", 475, GUIDE_TOP_Y);
+		g.drawString("Press 4 / 6 or click buttons to change key mode. Press A to toggle Auto.", 475, GUIDE_TOP_Y);
 
 		if (warningMessage != null && !warningMessage.isBlank()) {
 			g.setColor(new Color(255, 220, 90, 235));
@@ -190,6 +178,7 @@ public class OptionState implements GameState {
 	private void drawButtons(Graphics2D g) {
 		drawFixedButton(g, BUTTON_KEY_MODE_4, getFixedButtonText(BUTTON_KEY_MODE_4));
 		drawFixedButton(g, BUTTON_KEY_MODE_6, getFixedButtonText(BUTTON_KEY_MODE_6));
+		drawFixedButton(g, BUTTON_AUTO, getFixedButtonText(BUTTON_AUTO));
 
 		for (Lane lane : getPendingPlayableLanes()) {
 			drawLaneButton(g, lane);
@@ -207,23 +196,27 @@ public class OptionState implements GameState {
 			return pendingKeyCount == 6 ? "6K Mode ✓" : "6K Mode";
 		}
 
+		if (buttonIndex == BUTTON_AUTO) {
+			return context.isAutoMode() ? "Auto ON ✓" : "Auto OFF";
+		}
+
 		return "";
 	}
 
 	private void drawFixedButton(Graphics2D g, int buttonIndex, String text) {
 		Rectangle bounds = getFixedButtonBounds(buttonIndex);
-
 		boolean hovered = hoveredFixedButton == buttonIndex;
 		boolean pressed = pressedFixedButton == buttonIndex;
-		boolean selected = (buttonIndex == BUTTON_KEY_MODE_4 && pendingKeyCount == 4)
-				|| (buttonIndex == BUTTON_KEY_MODE_6 && pendingKeyCount == 6);
+		boolean selected =
+				(buttonIndex == BUTTON_KEY_MODE_4 && pendingKeyCount == 4)
+						|| (buttonIndex == BUTTON_KEY_MODE_6 && pendingKeyCount == 6)
+						|| (buttonIndex == BUTTON_AUTO && context.isAutoMode());
 
 		drawButton(g, bounds, text, hovered, pressed, selected);
 	}
 
 	private void drawLaneButton(Graphics2D g, Lane lane) {
 		Rectangle bounds = getLaneButtonBounds(lane);
-
 		boolean hovered = hoveredLaneButton == lane;
 		boolean pressed = pressedLaneButton == lane;
 		boolean selected = waitingKeyLane == lane;
@@ -313,15 +306,29 @@ public class OptionState implements GameState {
 
 			g2.setFont(new Font("Arial", Font.BOLD, 16));
 			drawCenteredString(g2, "BACK", bounds, text);
-
 		} finally {
 			g2.dispose();
 		}
 	}
 
+	private void drawAutoStatus(Graphics2D g) {
+		if (!context.isAutoMode()) {
+			return;
+		}
+
+		String text = "AUTO ON";
+
+		g.setFont(new Font("SansSerif", Font.BOLD, 18));
+		g.setColor(new Color(255, 120, 255));
+
+		int x = 20;
+		int y = 32;
+
+		g.drawString(text, x, y);
+	}
+
 	private void drawCenteredString(Graphics2D g, String text, Rectangle bounds, Color color) {
 		FontMetrics fm = g.getFontMetrics();
-
 		int textX = bounds.x + (bounds.width - fm.stringWidth(text)) / 2;
 		int textY = bounds.y + ((bounds.height - fm.getHeight()) / 2) + fm.getAscent();
 
@@ -349,14 +356,12 @@ public class OptionState implements GameState {
 			return;
 		}
 
-		if (e.getKeyCode() == KeyEvent.VK_4) {
-			setPendingKeyMode(4);
-		} else if (e.getKeyCode() == KeyEvent.VK_6) {
-			setPendingKeyMode(6);
-		} else if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
-			backToLevelSelect();
-		} else if (e.getKeyCode() == KeyEvent.VK_S) {
-			saveSettings();
+		switch (e.getKeyCode()) {
+			case KeyEvent.VK_4 -> setPendingKeyMode(4);
+			case KeyEvent.VK_6 -> setPendingKeyMode(6);
+			case KeyEvent.VK_A -> toggleAutoMode();
+			case KeyEvent.VK_ESCAPE -> backToLevelSelect();
+			case KeyEvent.VK_S -> saveSettings();
 		}
 	}
 
@@ -436,11 +441,7 @@ public class OptionState implements GameState {
 	}
 
 	private int getFixedButtonIndexAt(Point point) {
-		int[] indexes = {
-				BUTTON_KEY_MODE_4,
-				BUTTON_KEY_MODE_6,
-				BUTTON_SAVE
-		};
+		int[] indexes = { BUTTON_KEY_MODE_4, BUTTON_KEY_MODE_6, BUTTON_AUTO, BUTTON_SAVE };
 
 		for (int index : indexes) {
 			if (getFixedButtonBounds(index).contains(point)) {
@@ -465,6 +466,7 @@ public class OptionState implements GameState {
 		return switch (buttonIndex) {
 			case BUTTON_KEY_MODE_4 -> new Rectangle(LEFT_X, MODE_Y, MODE_BUTTON_W, MODE_BUTTON_H);
 			case BUTTON_KEY_MODE_6 -> new Rectangle(RIGHT_X, MODE_Y, MODE_BUTTON_W, MODE_BUTTON_H);
+			case BUTTON_AUTO -> new Rectangle(LEFT_X, BOTTOM_Y, BOTTOM_BUTTON_W, BOTTOM_BUTTON_H);
 			case BUTTON_SAVE -> new Rectangle(RIGHT_X, BOTTOM_Y, BOTTOM_BUTTON_W, BOTTOM_BUTTON_H);
 			default -> new Rectangle();
 		};
@@ -476,8 +478,8 @@ public class OptionState implements GameState {
 
 	private Rectangle getLaneButtonBounds(Lane lane) {
 		List<Lane> playableLanes = getPendingPlayableLanes();
-
 		int index = playableLanes.indexOf(lane);
+
 		if (index < 0) {
 			return new Rectangle();
 		}
@@ -505,6 +507,7 @@ public class OptionState implements GameState {
 		switch (buttonIndex) {
 			case BUTTON_KEY_MODE_4 -> setPendingKeyMode(4);
 			case BUTTON_KEY_MODE_6 -> setPendingKeyMode(6);
+			case BUTTON_AUTO -> toggleAutoMode();
 			case BUTTON_SAVE -> saveSettings();
 		}
 	}
@@ -573,9 +576,18 @@ public class OptionState implements GameState {
 	private void saveSettings() {
 		applyPendingSettingsToContext();
 		context.saveSettings();
+
 		savedNoticeVisible = true;
 		waitingKeyLane = null;
 		warningMessage = null;
+	}
+
+	private void toggleAutoMode() {
+		context.toggleAutoMode();
+
+		savedNoticeVisible = false;
+		warningMessage = null;
+		waitingKeyLane = null;
 	}
 
 	private void applyPendingSettingsToContext() {
@@ -604,15 +616,14 @@ public class OptionState implements GameState {
 
 		if (duplicatedLane != null && duplicatedLane != waitingKeyLane) {
 			String keyText = KeyEvent.getKeyText(keyCode);
-
-			warningMessage = keyText + " is already assigned to " + duplicatedLane.getDisplayName() + ". Change canceled.";
+			warningMessage = keyText + " is already assigned to " + duplicatedLane.getDisplayName()
+					+ ". Change canceled.";
 			waitingKeyLane = null;
 			savedNoticeVisible = false;
 			return;
 		}
 
 		pendingKeyBindings.put(waitingKeyLane, keyCode);
-
 		waitingKeyLane = null;
 		warningMessage = null;
 		savedNoticeVisible = false;
@@ -625,7 +636,6 @@ public class OptionState implements GameState {
 			}
 
 			int existingKeyCode = getPendingKeyCodeForLane(lane);
-
 			if (existingKeyCode == keyCode) {
 				return lane;
 			}
@@ -648,12 +658,10 @@ public class OptionState implements GameState {
 		warningMessage = null;
 		savedNoticeVisible = false;
 		pendingKeyBindings.clear();
-
 		hoveredFixedButton = -1;
 		pressedFixedButton = -1;
 		hoveredLaneButton = null;
 		pressedLaneButton = null;
-
 		backButtonHovered = false;
 		backButtonPressed = false;
 	}

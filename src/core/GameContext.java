@@ -36,6 +36,8 @@ public class GameContext {
 	private GameState currentState;
 	private GamePanel gamePanel;
 	private Difficulty currentDifficulty = Difficulty.Easy;
+	private boolean autoMode = false;
+
 	private double GLOBAL_OFFSET = -0.08;
 
 	private KeyMode keyMode = KeyMode.KEY_4;
@@ -64,11 +66,11 @@ public class GameContext {
 	public void setGamePanel(GamePanel gamePanel) {
 		this.gamePanel = gamePanel;
 	}
-	
+
 	public GamePanel getGamePanel() {
 		return gamePanel;
 	}
-	
+
 	public GameState getCurrentState() {
 		return currentState;
 	}
@@ -83,6 +85,18 @@ public class GameContext {
 		}
 
 		this.currentDifficulty = currentDifficulty;
+	}
+
+	public boolean isAutoMode() {
+		return autoMode;
+	}
+
+	public void setAutoMode(boolean autoMode) {
+		this.autoMode = autoMode;
+	}
+
+	public void toggleAutoMode() {
+		autoMode = !autoMode;
 	}
 
 	public double getGlobalOffset() {
@@ -244,7 +258,6 @@ public class GameContext {
 
 		for (Lane lane : keyMode.getLanes()) {
 			Integer boundKeyCode = laneKeyBindings.get(lane);
-
 			if (boundKeyCode != null && boundKeyCode == keyCode) {
 				return lane;
 			}
@@ -261,7 +274,6 @@ public class GameContext {
 		ensureLaneKeyBindings();
 
 		LinkedHashMap<Lane, Integer> copy = new LinkedHashMap<>();
-
 		for (Lane lane : keyMode.getLanes()) {
 			copy.put(lane, laneKeyBindings.get(lane));
 		}
@@ -277,13 +289,12 @@ public class GameContext {
 		props.setProperty("globalOffset", Double.toString(GLOBAL_OFFSET));
 		props.setProperty("noteIndex", Integer.toString(noteIndex));
 		props.setProperty("currentDifficulty", currentDifficulty.name());
+		props.setProperty("autoMode", Boolean.toString(autoMode));
 		props.setProperty("keyMode", keyMode.name());
-		props.setProperty("keyCount", Integer.toString(keyMode.getKeyCount()));
 
 		for (KeyMode mode : KeyMode.values()) {
 			for (Lane lane : mode.getLanes()) {
 				Integer keyCode = laneKeyBindings.get(lane);
-
 				if (keyCode != null && keyCode != KeyEvent.VK_UNDEFINED) {
 					props.setProperty(getKeyBindingPropertyName(mode, lane), Integer.toString(keyCode));
 				}
@@ -292,7 +303,6 @@ public class GameContext {
 
 		try {
 			Path parent = settingsPath.getParent();
-
 			if (parent != null) {
 				Files.createDirectories(parent);
 			}
@@ -342,7 +352,6 @@ public class GameContext {
 
 				try {
 					int keyCode = Integer.parseInt(value.trim());
-
 					if (keyCode != KeyEvent.VK_UNDEFINED) {
 						laneKeyBindings.put(lane, keyCode);
 					}
