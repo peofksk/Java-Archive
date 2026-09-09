@@ -2,7 +2,9 @@
 > Note Rhythm game
 
 
-https://github.com/altakori/Java-Archive/assets/126345795/2245f8ef-6f3b-474e-8d63-c77d71aeeb00
+## Teaser
+
+[Java-Archive Teaser](./docs/media/Java-Archive_teaser.mp4)
 
 ## Updates
 
