@@ -4,7 +4,10 @@
 
 ## Teaser
 
-[Java-Archive Teaser](./docs/media/Java-Archive_teaser.mp4)
+https://github.com/user-attachments/assets/1cdcdbaa-0cbf-4b0b-9954-a52e161265ab
+
+
+
 
 ## Updates
 
