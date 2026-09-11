@@ -24,3 +24,7 @@
 hs_err_pid*
 replay_pid*
 /Game/
+# gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
